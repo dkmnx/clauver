@@ -33,7 +33,8 @@ While it may work on other Unix-like systems (macOS, WSL), compatibility is not 
 
 ## Credits
 
-Clauver is heavily inspired by **[clother](https://github.com/jolehuit/clother)** by [jolehuit](https://github.com/jolehuit).
+Clauver is heavily inspired by **[clother](https://github.com/jolehuit/clother)**
+by [jolehuit](https://github.com/jolehuit).
 Special thanks to the original project for the inspiration and architectural concepts.
 
 ## Installation
