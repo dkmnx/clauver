@@ -13,22 +13,23 @@ BIN="$BASE/bin"
 # Detect if script is being run via curl
 
 # Check if we can detect stdin is not a terminal AND the script file doesn't exist locally
+# Use a safer approach to detect if script is local or piped
+SCRIPT_TEMP_FILE=$(mktemp)
+echo "$0" > "$SCRIPT_TEMP_FILE"
+
 if [ -n "${INSTALL_SCRIPT_URL:-}" ]; then
   SCRIPT_SOURCE="remote"
-  # Safe way to get script directory when BASH_SOURCE might not be available
-  if [[ -v BASH_SOURCE ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-  else
-    SCRIPT_DIR="$(pwd)"
-  fi
-elif [[ -v BASH_SOURCE ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_DIR="$(pwd)"
+elif [ -f "$0" ] && [ "$(head -c 10 "$SCRIPT_TEMP_FILE")" != "bash" ]; then
   SCRIPT_SOURCE="local"
-  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 else
   SCRIPT_SOURCE="curl"
   INSTALL_SCRIPT_URL="${INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/dkmnx/clauver/main}"
   SCRIPT_DIR="$(pwd)"
 fi
+
+rm -f "$SCRIPT_TEMP_FILE"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
