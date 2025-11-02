@@ -10,6 +10,26 @@ CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
 BIN="$BASE/bin"
 
+# Detect if script is being run via curl
+
+# Check if we can detect stdin is not a terminal AND the script file doesn't exist locally
+if [ -n "${INSTALL_SCRIPT_URL:-}" ]; then
+  SCRIPT_SOURCE="remote"
+  # Safe way to get script directory when BASH_SOURCE might not be available
+  if [[ -v BASH_SOURCE ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  else
+    SCRIPT_DIR="$(pwd)"
+  fi
+elif [[ -v BASH_SOURCE ]] && [[ -f "${BASH_SOURCE[0]}" ]]; then
+  SCRIPT_SOURCE="local"
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+else
+  SCRIPT_SOURCE="curl"
+  INSTALL_SCRIPT_URL="${INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/dkmnx/clauver/main}"
+  SCRIPT_DIR="$(pwd)"
+fi
+
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -32,6 +52,10 @@ SHELL_NAME="${SHELL##*/}"
 
 echo -e "${BOLD}Clauver v${VERSION}${NC}"
 echo
+if [ "$SCRIPT_SOURCE" = "curl" ]; then
+  echo -e "${YELLOW}Installing via curl${NC}"
+  echo
+fi
 log "Checking for 'claude' command..."
 if ! command -v claude &>/dev/null; then
   error "'claude' command not found."
@@ -52,10 +76,15 @@ chmod 600 "$CONFIG"
 touch "$SECRETS"
 chmod 600 "$SECRETS"
 
-# Clean installation: Copy the clauver script directly
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cp "$SCRIPT_DIR/clauver.sh" "$BIN/clauver"
-chmod +x "$BIN/clauver"
+# Clean installation: Copy or download the clauver script
+if [ "$SCRIPT_SOURCE" = "curl" ] || [ "$SCRIPT_SOURCE" = "remote" ]; then
+  log "Installing from remote source..."
+  curl -fsSL "$INSTALL_SCRIPT_URL/clauver.sh" -o "$BIN/clauver"
+  chmod +x "$BIN/clauver"
+else
+  cp "$SCRIPT_DIR/clauver.sh" "$BIN/clauver"
+  chmod +x "$BIN/clauver"
+fi
 
 if ! "$BIN/clauver" help &>/dev/null; then
   error "Installation failed - clauver command doesn't work"
@@ -87,13 +116,21 @@ case "$SHELL_NAME" in
         echo "[ -f \"$COMPLETION_DIR/clauver.bash\" ] && . \"$COMPLETION_DIR/clauver.bash\""
       } >> "$COMPLETION_FILE"
     fi
-    cp "$SCRIPT_DIR/completion/clauver.bash" "$COMPLETION_DIR/" 2>/dev/null || true
+    if [ "$SCRIPT_SOURCE" = "curl" ] || [ "$SCRIPT_SOURCE" = "remote" ]; then
+      curl -fsSL "$INSTALL_SCRIPT_URL/completion/clauver.bash" -o "$COMPLETION_DIR/clauver.bash" 2>/dev/null || true
+    else
+      cp "$SCRIPT_DIR/completion/clauver.bash" "$COMPLETION_DIR/" 2>/dev/null || true
+    fi
     success "Auto-completion installed for bash"
     ;;
   zsh)
     COMPLETION_DIR_ZSH="$HOME/.zfunc"
     mkdir -p "$COMPLETION_DIR_ZSH"
-    cp "$SCRIPT_DIR/completion/clauver.zsh" "$COMPLETION_DIR_ZSH/_clauver" 2>/dev/null || true
+    if [ "$SCRIPT_SOURCE" = "curl" ] || [ "$SCRIPT_SOURCE" = "remote" ]; then
+      curl -fsSL "$INSTALL_SCRIPT_URL/completion/clauver.zsh" -o "$COMPLETION_DIR_ZSH/_clauver" 2>/dev/null || true
+    else
+      cp "$SCRIPT_DIR/completion/clauver.zsh" "$COMPLETION_DIR_ZSH/_clauver" 2>/dev/null || true
+    fi
     if ! grep -q "# Clauver completion" "$HOME/.zshrc" 2>/dev/null; then
       {
         echo ""
@@ -105,7 +142,11 @@ case "$SHELL_NAME" in
     ;;
   fish)
     mkdir -p "$HOME/.config/fish/completions"
-    cp "$SCRIPT_DIR/completion/clauver.fish" "$HOME/.config/fish/completions/clauver.fish" 2>/dev/null || true
+    if [ "$SCRIPT_SOURCE" = "curl" ] || [ "$SCRIPT_SOURCE" = "remote" ]; then
+      curl -fsSL "$INSTALL_SCRIPT_URL/completion/clauver.fish" -o "$HOME/.config/fish/completions/clauver.fish" 2>/dev/null || true
+    else
+      cp "$SCRIPT_DIR/completion/clauver.fish" "$HOME/.config/fish/completions/clauver.fish" 2>/dev/null || true
+    fi
     success "Auto-completion installed for fish"
     ;;
 esac
@@ -122,6 +163,13 @@ if [[ ":$PATH:" != *":$BIN:"* ]]; then
 fi
 
 echo
+if [ "$SCRIPT_SOURCE" = "local" ]; then
+  echo -e "${BOLD}Installation methods:${NC}"
+  echo "  Local install: $(basename "$0")"
+  echo -e "  Curl install:  ${GREEN}curl -fsSL https://raw.githubusercontent.com/dkmnx/clauver/main/clauver-installer.sh | bash${NC}"
+  echo
+fi
+
 echo -e "${BOLD}What's next?${NC}"
 echo " 1. Quick start:"
 echo -e "   ${GREEN}clauver setup${NC}             # Interactive setup wizard"
