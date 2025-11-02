@@ -8,7 +8,7 @@
 
 ## Overview
 
-Clauver is a powerful CLI tool that allows you to easily manage and switch
+_Clauver_ is a powerful CLI tool that allows you to easily manage and switch
 between different Claude Code API providers, including:
 
 - **Native Anthropic** - Use your existing Claude Pro/Team subscription
@@ -33,7 +33,7 @@ While it may work on other Unix-like systems (macOS, WSL), compatibility is not 
 
 ## Credits
 
-Clauver is heavily inspired by **[clother](https://github.com/jolehuit/clother)**
+_Clauver_ is heavily inspired by **[clother](https://github.com/jolehuit/clother)**
 by [jolehuit](https://github.com/jolehuit).
 Special thanks to the original project for the inspiration and architectural concepts.
 
@@ -153,7 +153,7 @@ clauver my-provider "Hello"
 
 ## Auto-completion
 
-Clauver includes auto-completion for bash, zsh, and fish.
+_Clauver_ includes auto-completion for `bash`, `zsh`, and `fish`.
 
 After installation, try:
 
@@ -184,7 +184,7 @@ clauver/
 
 ## Configuration Storage
 
-Clauver uses a two-file configuration system:
+_Clauver_ uses a two-file configuration system:
 
 ```text
 ~/.clauver/
