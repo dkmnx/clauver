@@ -1,6 +1,6 @@
 # Clauver
 
-**Claude Code Provider Manager** - Switch between multiple Claude API providers seamlessly.
+**Claude Code Provider Manager** - Switch between multiple Claude Code API providers seamlessly.
 
 [![Shellcheck](https://img.shields.io/badge/shellcheck-passing-brightgreen)](https://github.com/koalaman/shellcheck)
 [![Version](https://img.shields.io/badge/version-1.2.0-blue)](https://github.com/anthropics/claude-code)
@@ -9,7 +9,7 @@
 ## Overview
 
 Clauver is a powerful CLI tool that allows you to easily manage and switch
-between different Claude API providers, including:
+between different Claude Code API providers, including:
 
 - **Native Anthropic** - Use your existing Claude Pro/Team subscription
 - **Z.AI (GLM)** - Zhipu AI's GLM models
