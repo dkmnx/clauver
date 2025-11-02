@@ -613,6 +613,9 @@ case "${1:-}" in
   help|-h|--help)
     show_help
     ;;
+  version|-v|--version)
+    echo "${VERSION}"
+    ;;
   setup|-s)
     cmd_setup
     ;;
