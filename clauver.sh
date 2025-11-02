@@ -485,7 +485,7 @@ cmd_status() {
 
   echo -e "${BOLD}Native Anthropic:${NC}"
   if command -v claude &>/dev/null; then
-    success "✓ Installed"
+    success "Installed"
   else
     error "✗ Not installed"
   fi
@@ -497,7 +497,7 @@ cmd_status() {
     api_key="$(get_secret "$key_name")"
     echo -e "${BOLD}${provider}:${NC}"
     if [ -n "$api_key" ]; then
-      success "✓ Configured ($(mask_key "$api_key"))"
+      success "Configured ($(mask_key "$api_key"))"
     else
       warn "○ Not configured"
     fi
@@ -511,7 +511,7 @@ cmd_status() {
         provider_name="${provider_name%_api_key}"
         if [ -n "$value" ]; then
           echo -e "${BOLD}${provider_name}:${NC}"
-          success "✓ Configured ($(mask_key "$value"))"
+          success "Configured ($(mask_key "$value"))"
           echo "  Base URL: $(get_config "custom_${provider_name}_base_url")"
           echo
         fi
@@ -550,7 +550,7 @@ EOF
   case "$choice" in
     1)
       echo
-      success "✓ Native Anthropic is ready to use!"
+      success "Native Anthropic is ready to use!"
       echo
       echo -e "${GREEN}Next steps:${NC}"
       echo "  • Simply run: ${BOLD}clauver anthropic${NC}"
