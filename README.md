@@ -18,9 +18,9 @@ between different Claude Code API providers, including:
 - **KAT-Coder** - Kwaipilot's KAT-Coder
 - **Custom Providers** - Add your own provider
 
-> **⚠️ Platform Compatibility**:
+> _**⚠️ Platform Compatibility**:
 This script has been tested and confirmed to work on Linux only.
-While it may work on other Unix-like systems (macOS, WSL), compatibility is not guaranteed.
+While it may work on other Unix-like systems (macOS, WSL), compatibility is not guaranteed._
 
 ## Features
 
@@ -150,6 +150,8 @@ clauver config custom
 # Use it
 clauver my-provider "Hello"
 ```
+
+> _**⚠️ CAUTION**: This custom provider is not fully tested yet and may not work as expected. Use at your own risk._
 
 ## Auto-completion
 
