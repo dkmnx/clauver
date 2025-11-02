@@ -42,9 +42,7 @@ Special thanks to the original project for the inspiration and architectural con
 ### Quick Install
 
 ```bash
-git clone <repository-url> clauver
-cd clauver
-bash clauver-installer.sh
+curl -fsSL https://raw.githubusercontent.com/dkmnx/clauver/main/clauver-installer.sh | bash
 ```
 
 The installer will:
@@ -58,7 +56,7 @@ The installer will:
 
 ```bash
 # Clone the repository
-git clone <repository-url> clauver
+git clone https://github.com/dkmnx/clauver clauver
 cd clauver
 
 # Install
