@@ -1,7 +1,9 @@
 #!/bin/bash
+
 # Clauver Bash Completion
 
 _clauver_completion() {
+
   # shellcheck disable=SC2034
   local cur prev words cword
   _init_completion || return

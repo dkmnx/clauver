@@ -1,4 +1,4 @@
-#compdef clauver
+# compdef clauver
 
 _clauver() {
   local context curcontext="clauver" state line

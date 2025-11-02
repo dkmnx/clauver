@@ -1,4 +1,5 @@
 #!/usr/bin/env fish
+
 # Clauver Fish Completion
 
 complete -c clauver -n "__fish_use_subcommand" -f -xa "help setup config list status test anthropic zai minimax kimi katcoder"
