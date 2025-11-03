@@ -788,12 +788,40 @@ case "${1:-}" in
     cmd="$1"
     api_key="$(get_config "custom_${cmd}_api_key")"
     if [ -n "$api_key" ]; then
+      # It's a custom provider
       shift
       switch_to_custom "$cmd" "$@"
     else
-      error "Unknown command: '$1'"
-      echo "Use 'clauver help' for available commands."
-      exit 1
+      # Check if a default provider is set
+      default_provider="$(get_config "default_provider")"
+      if [ -n "$default_provider" ]; then
+        # Use the default provider with all arguments
+        case "$default_provider" in
+          anthropic)
+            switch_to_anthropic "$@"
+            ;;
+          zai)
+            switch_to_zai "$@"
+            ;;
+          minimax)
+            switch_to_minimax "$@"
+            ;;
+          kimi)
+            switch_to_kimi "$@"
+            ;;
+          katcoder)
+            switch_to_katcoder "$@"
+            ;;
+          *)
+            # It's a custom provider
+            switch_to_custom "$default_provider" "$@"
+            ;;
+        esac
+      else
+        error "Unknown command: '$1'"
+        echo "Use 'clauver help' for available commands."
+        exit 1
+      fi
     fi
     ;;
 esac
