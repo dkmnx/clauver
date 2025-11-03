@@ -8,7 +8,7 @@
 ```
 
 [![Shellcheck](https://img.shields.io/badge/shellcheck-passing-brightgreen)](https://github.com/koalaman/shellcheck)
-[![Version](https://img.shields.io/badge/version-1.3.0-blue)](https://github.com/anthropics/claude-code)
+[![Version](https://img.shields.io/badge/version-1.3.1-blue)](https://github.com/anthropics/claude-code)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 # Clauver
