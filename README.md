@@ -2,6 +2,15 @@
 
 **Claude Code Provider Manager** - Switch between multiple Claude Code API providers seamlessly.
 
+```text
+  ██████╗██╗      █████╗ ██╗   ██╗██╗   ██╗███████╗██████╗
+ ██╔════╝██║     ██╔══██╗██║   ██║██║   ██║██╔════╝██╔══██╗
+ ██║     ██║     ███████║██║   ██║██║   ██║█████╗  ██████╔╝
+ ██║     ██║     ██╔══██║██║   ██║╚██╗ ██╔╝██╔══╝  ██╔══██╗
+ ╚██████╗███████╗██║  ██║╚██████╔╝ ╚████╔╝ ███████╗██║  ██║
+  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═══╝  ╚══════╝╚═╝  ╚═╝
+```
+
 [![Shellcheck](https://img.shields.io/badge/shellcheck-passing-brightgreen)](https://github.com/koalaman/shellcheck)
 [![Version](https://img.shields.io/badge/version-1.2.2-blue)](https://github.com/anthropics/claude-code)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
