@@ -8,21 +8,21 @@ BASE="${CLAUVER_HOME:-$HOME/.clauver}"
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
 
-RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-BOLD='\033[1m'
-NC='\033[0m'
+RED=$'\033[0;31m'
+GREEN=$'\033[0;32m'
+YELLOW=$'\033[1;33m'
+BLUE=$'\033[0;34m'
+BOLD=$'\033[1m'
+NC=$'\033[0m'
 
-log() { echo -e "${BLUE}→${NC} $*"; }
-success() { echo -e "${GREEN}✓${NC} $*"; }
-warn() { echo -e "${YELLOW}!${NC} $*"; }
-error() { echo -e "${RED}✗${NC} $*" >&2; }
+log() { printf "${BLUE}→${NC} %s\n" "$*"; }
+success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
+warn() { printf "${YELLOW}!${NC} %s\n" "$*"; }
+error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
 
 banner() {
   provider="$1"
-  echo -e "${BOLD}${BLUE}"
+  printf "%b" "${BOLD}${BLUE}"
   cat <<BANNER
   ██████╗██╗      █████╗ ██╗   ██╗██╗   ██╗███████╗██████╗
  ██╔════╝██║     ██╔══██╗██║   ██║██║   ██║██╔════╝██╔══██╗
@@ -32,7 +32,7 @@ banner() {
   ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═══╝  ╚══════╝╚═╝  ╚═╝
   v${VERSION} - ${provider}
 BANNER
-  echo -e "${NC}"
+  printf "%b" "${NC}"
 }
 
 [ -f "$CONFIG" ] || true
@@ -93,28 +93,29 @@ mask_key() {
 }
 
 show_help() {
-  echo -e "${BOLD}Clauver v${VERSION}${NC}"
+  echo "Clauver v${VERSION}"
   echo "Manage and switch between Claude Code providers"
   echo
-  echo -e "${YELLOW}Quick Start:${NC}"
+  echo "Quick Start:"
   echo "  clauver setup        # Interactive setup wizard"
   echo "  clauver zai          # Switch to Z.AI"
   echo "  claude \"hello\"       # Use current provider"
   echo
-  echo -e "${YELLOW}Usage:${NC}"
+  echo "Usage:"
   echo "  clauver <command> [args]"
   echo
-  echo -e "${BOLD}Setup & Help:${NC}"
+  echo "Setup & Help:"
   echo "  setup, -s            Interactive setup wizard for beginners"
   echo "  help, -h, --help     Show this help message"
   echo
-  echo -e "${BOLD}Provider Management:${NC}"
+  echo "Provider Management:"
   echo "  list                 List all configured providers"
   echo "  status               Check status of all providers"
   echo "  config <provider>    Configure a specific provider"
   echo "  test <provider>      Test a provider configuration"
+  echo "  default [provider]   Set or show default provider"
   echo
-  echo -e "${BOLD}Switch Providers:${NC}"
+  echo "Switch Providers:"
   echo "  anthropic            Use Native Anthropic (no API key needed)"
   echo "  zai                  Switch to Z.AI provider"
   echo "  minimax              Switch to MiniMax provider"
@@ -122,16 +123,19 @@ show_help() {
   echo "  katcoder             Switch to KAT-Coder provider"
   echo "  <custom>             Switch to your custom provider"
   echo
-  echo -e "${YELLOW}Examples:${NC}"
+  echo "Examples:"
   echo "  clauver setup        # Guided setup for first-time users"
   echo "  clauver list         # Show all providers"
   echo "  clauver config zai   # Configure Z.AI provider"
   echo "  clauver test zai     # Test Z.AI provider"
   echo "  clauver zai          # Use Z.AI for this session"
   echo "  clauver anthropic    # Use Native Anthropic"
+  echo "  clauver default zai  # Set Z.AI as default provider"
+  echo "  clauver              # Use default provider (after setting one)"
   echo
-  echo -e "${YELLOW}💡 Tips:${NC}"
-  echo "  • Space-separated commands: clauver zai, clauver minimax, etc."
+  echo "💡 Tips:"
+  echo "  • Set a default: clauver default <provider>"
+  echo "  • Run clauver without arguments to use your default provider"
   echo "  • Auto-completion available: clauver <TAB><TAB>"
   echo "  • Any valid provider name works: clauver your-provider"
   echo "  • All claude flags work: clauver zai --dangerously-skip-permissions"
@@ -520,6 +524,99 @@ cmd_status() {
   fi
 }
 
+cmd_default() {
+  local provider="${1:-}"
+
+  if [ -z "$provider" ]; then
+    local current_default
+    current_default="$(get_config "default_provider")"
+    if [ -n "$current_default" ]; then
+      echo "Current default provider: $current_default"
+    else
+      echo "No default provider set."
+      echo
+      echo "Usage: clauver default <provider>"
+      echo "Example: clauver default minimax"
+    fi
+    return 0
+  fi
+
+  # Validate that the provider exists and is configured
+  case "$provider" in
+    anthropic)
+      # Native Anthropic is always available
+      set_config "default_provider" "$provider"
+      success "Default provider set to: ${provider}"
+      echo "Run 'clauver' without arguments to use this provider."
+      return 0
+      ;;
+    zai)
+      local zai_key
+      zai_key="$(get_secret "ZAI_API_KEY")"
+      if [ -z "$zai_key" ]; then
+        error "Z.AI is not configured. Run: clauver config zai"
+        return 1
+      fi
+      set_config "default_provider" "$provider"
+      success "Default provider set to: ${provider}"
+      echo "Run 'clauver' without arguments to use this provider."
+      return 0
+      ;;
+    minimax)
+      local minimax_key
+      minimax_key="$(get_secret "MINIMAX_API_KEY")"
+      if [ -z "$minimax_key" ]; then
+        error "MiniMax is not configured. Run: clauver config minimax"
+        return 1
+      fi
+      set_config "default_provider" "$provider"
+      success "Default provider set to: ${provider}"
+      echo "Run 'clauver' without arguments to use this provider."
+      return 0
+      ;;
+    kimi)
+      local kimi_key
+      kimi_key="$(get_secret "KIMI_API_KEY")"
+      if [ -z "$kimi_key" ]; then
+        error "Kimi is not configured. Run: clauver config kimi"
+        return 1
+      fi
+      set_config "default_provider" "$provider"
+      success "Default provider set to: ${provider}"
+      echo "Run 'clauver' without arguments to use this provider."
+      return 0
+      ;;
+    katcoder)
+      local katcoder_key
+      katcoder_key="$(get_secret "KATCODER_API_KEY")"
+      if [ -z "$katcoder_key" ]; then
+        error "KAT-Coder is not configured. Run: clauver config katcoder"
+        return 1
+      fi
+      set_config "default_provider" "$provider"
+      success "Default provider set to: ${provider}"
+      echo "Run 'clauver' without arguments to use this provider."
+      return 0
+      ;;
+    *)
+      # Check if it's a custom provider
+      local custom_key
+      custom_key="$(get_config "custom_${provider}_api_key")"
+      if [ -n "$custom_key" ]; then
+        set_config "default_provider" "$provider"
+        success "Default provider set to: ${provider}"
+        echo "Run 'clauver' without arguments to use this provider."
+        return 0
+      else
+        error "Unknown or unconfigured provider: '$provider'"
+        echo
+        echo "Use 'clauver list' to see available providers."
+        return 1
+      fi
+      ;;
+  esac
+}
+
 cmd_setup() {
   echo -e "${BOLD}${BLUE}"
   cat <<'EOF'
@@ -633,6 +730,10 @@ case "${1:-}" in
   status)
     cmd_status
     ;;
+  default)
+    shift
+    cmd_default "$@"
+    ;;
   anthropic)
     shift
     switch_to_anthropic "$@"
@@ -654,7 +755,34 @@ case "${1:-}" in
     switch_to_katcoder "$@"
     ;;
   "")
-    show_help
+    # Check if a default provider is set
+    default_provider="$(get_config "default_provider")"
+    if [ -n "$default_provider" ]; then
+      # Use the default provider
+      case "$default_provider" in
+        anthropic)
+          switch_to_anthropic "$@"
+          ;;
+        zai)
+          switch_to_zai "$@"
+          ;;
+        minimax)
+          switch_to_minimax "$@"
+          ;;
+        kimi)
+          switch_to_kimi "$@"
+          ;;
+        katcoder)
+          switch_to_katcoder "$@"
+          ;;
+        *)
+          # It's a custom provider
+          switch_to_custom "$default_provider" "$@"
+          ;;
+      esac
+    else
+      show_help
+    fi
     ;;
   *)
     cmd="$1"
