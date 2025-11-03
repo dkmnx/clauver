@@ -14,6 +14,9 @@ _clauver() {
         test)
           _arguments '1: :(anthropic zai minimax kimi katcoder)'
           ;;
+        default)
+          _arguments '1: :(anthropic zai minimax kimi katcoder)'
+          ;;
         *)
           ;;
       esac
@@ -30,6 +33,7 @@ _clauver() {
       'list:List all configured providers'
       'status:Check status of all providers'
       'test:Test a provider configuration'
+      'default:Set or show default provider'
       'anthropic:Use Native Anthropic'
       'zai:Switch to Z.AI provider'
       'minimax:Switch to MiniMax provider'
