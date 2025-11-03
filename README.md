@@ -36,6 +36,7 @@ While it may work on other Unix-like systems (macOS, WSL), compatibility is not 
 - **Easy Provider Switching** - Switch providers with a single command
 - **Secure API Key Management** - Store and mask API keys safely
 - **Configuration Testing** - Test provider configurations before use
+- **Default Provider** - Set a default provider for quick access
 - **Auto-completion** - Tab completion for bash, zsh, and fish
 - **Quick Setup Wizard** - Interactive setup for beginners
 - **Status Monitoring** - Check all configured providers at once
@@ -108,12 +109,28 @@ clauver katcoder     # Use KAT-Coder
 clauver <custom>     # Use custom provider
 ```
 
+### Default Provider
+
+Set a default provider for quick access:
+
+```bash
+# Set default provider
+clauver default zai
+
+# Show current default
+clauver default
+
+# Use default provider (no arguments needed)
+clauver "What can you help me with?"
+```
+
 ### Manage Providers
 
 ```bash
 clauver list         # List all providers
 clauver status       # Check provider status
 clauver test <name>  # Test a provider
+clauver default      # Show or set default provider
 clauver help         # Show help
 ```
 
@@ -144,6 +161,22 @@ clauver test zai
 
 # Test all providers
 clauver status
+```
+
+### Setting a Default Provider
+
+```bash
+# Set your preferred default provider
+clauver default minimax
+
+# Verify the default is set
+clauver default
+
+# Use the default provider
+clauver "Help me write a bash script"
+
+# Change your default anytime
+clauver default anthropic
 ```
 
 ### Custom Provider
@@ -214,9 +247,10 @@ _Clauver_ uses a two-file configuration system:
   - `KIMI_API_KEY`
   - `KATCODER_API_KEY`
 
-- **config**: Stores only custom provider configurations:
+- **config**: Stores provider configurations:
   - Base URLs, models, and endpoint IDs
   - Custom provider definitions
+  - `default_provider` - Your preferred default provider
 
 ## Troubleshooting
 
