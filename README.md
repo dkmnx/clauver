@@ -52,7 +52,7 @@ Special thanks to the original project for the inspiration and architectural con
 ### Quick Install
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/dkmnx/clauver/main/clauver-installer.sh | bash
+curl -fsSL https://raw.githubusercontent.com/dkmnx/clauver/main/install.sh | bash
 ```
 
 The installer will:
@@ -217,7 +217,7 @@ clauver z<TAB>            # Complete to 'clauver zai'
 ```text
 clauver/
 ├── clauver.sh              # Main CLI script
-├── clauver-installer.sh    # Installation script
+├── install.sh    # Installation script
 ├── completion/             # Auto-completion files
 │   ├── clauver.bash
 │   ├── clauver.zsh
