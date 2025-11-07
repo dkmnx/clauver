@@ -161,12 +161,17 @@ cmd_list() {
       echo -e "${GREEN}✓ ${provider}${NC}"
       echo "  Command: clauver $provider"
       echo "  API Key: $(mask_key "$api_key")"
-      # Show model for Kimi
+      # Show model and URL for Kimi
       if [ "$provider" == "kimi" ]; then
         local kimi_model
         kimi_model="$(get_config "kimi_model")"
         kimi_model="${kimi_model:-kimi-for-coding}"
         echo "  Model: $kimi_model"
+
+        local kimi_base_url
+        kimi_base_url="$(get_config "kimi_base_url")"
+        kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+        echo "  Base URL: $kimi_base_url"
       fi
       echo
     fi
@@ -238,7 +243,7 @@ cmd_config() {
         set_config "katcoder_endpoint_id" "$endpoint"
       fi
 
-      # Save model for Kimi
+      # Save model and URL for Kimi
       if [ "$provider" == "kimi" ]; then
         local current_model
         current_model="$(get_config "kimi_model")"
@@ -246,6 +251,13 @@ cmd_config() {
         read -r -p "Model (default: kimi-for-coding): " model
         model="${model:-kimi-for-coding}"
         [ -n "$model" ] && set_config "kimi_model" "$model"
+
+        local current_url
+        current_url="$(get_config "kimi_base_url")"
+        [ -n "$current_url" ] && echo "Current base URL: $current_url"
+        read -r -p "Base URL (default: https://api.kimi.com/coding/): " url
+        url="${url:-https://api.kimi.com/coding/}"
+        [ -n "$url" ] && set_config "kimi_base_url" "$url"
       fi
 
       success "${provider^^} configured. Use: clauver $provider"
@@ -351,9 +363,14 @@ switch_to_kimi() {
   kimi_model="$(get_config "kimi_model")"
   kimi_model="${kimi_model:-kimi-for-coding}"
 
+  # Get configured URL or use default
+  local kimi_base_url
+  kimi_base_url="$(get_config "kimi_base_url")"
+  kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+
   banner "Moonshot AI (${kimi_model})"
 
-  export ANTHROPIC_BASE_URL="https://api.moonshot.ai/anthropic"
+  export ANTHROPIC_BASE_URL="$kimi_base_url"
   export ANTHROPIC_AUTH_TOKEN="$kimi_key"
   export ANTHROPIC_MODEL="$kimi_model"
   export ANTHROPIC_SMALL_FAST_MODEL="$kimi_model"
@@ -459,7 +476,10 @@ cmd_test() {
           export API_TIMEOUT_MS="3000000"
           ;;
         kimi)
-          export ANTHROPIC_BASE_URL="https://api.moonshot.ai/anthropic"
+          local kimi_base_url
+          kimi_base_url="$(get_config "kimi_base_url")"
+          kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+          export ANTHROPIC_BASE_URL="$kimi_base_url"
           local kimi_model
           kimi_model="$(get_config "kimi_model")"
           kimi_model="${kimi_model:-kimi-for-coding}"
@@ -534,6 +554,17 @@ cmd_status() {
     echo -e "${BOLD}${provider}:${NC}"
     if [ -n "$api_key" ]; then
       success "Configured ($(mask_key "$api_key"))"
+      # Show additional config for Kimi
+      if [ "$provider" == "kimi" ]; then
+        local kimi_model
+        kimi_model="$(get_config "kimi_model")"
+        kimi_model="${kimi_model:-kimi-for-coding}"
+        local kimi_base_url
+        kimi_base_url="$(get_config "kimi_base_url")"
+        kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+        echo "  Model: $kimi_model"
+        echo "  URL: $kimi_base_url"
+      fi
     else
       warn "○ Not configured"
     fi
