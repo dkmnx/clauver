@@ -161,6 +161,13 @@ cmd_list() {
       echo -e "${GREEN}✓ ${provider}${NC}"
       echo "  Command: clauver $provider"
       echo "  API Key: $(mask_key "$api_key")"
+      # Show model for Kimi
+      if [ "$provider" == "kimi" ]; then
+        local kimi_model
+        kimi_model="$(get_config "kimi_model")"
+        kimi_model="${kimi_model:-kimi-for-coding}"
+        echo "  Model: $kimi_model"
+      fi
       echo
     fi
   done
@@ -231,6 +238,16 @@ cmd_config() {
         set_config "katcoder_endpoint_id" "$endpoint"
       fi
 
+      # Save model for Kimi
+      if [ "$provider" == "kimi" ]; then
+        local current_model
+        current_model="$(get_config "kimi_model")"
+        [ -n "$current_model" ] && echo "Current model: $current_model"
+        read -r -p "Model (default: kimi-for-coding): " model
+        model="${model:-kimi-for-coding}"
+        [ -n "$model" ] && set_config "kimi_model" "$model"
+      fi
+
       success "${provider^^} configured. Use: clauver $provider"
       ;;
     custom)
@@ -292,6 +309,7 @@ switch_to_zai() {
   export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
   export ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4.6"
   export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.6"
+
   exec claude "$@"
 }
 
@@ -315,6 +333,7 @@ switch_to_minimax() {
   export ANTHROPIC_DEFAULT_OPUS_MODEL="MiniMax-M2"
   export API_TIMEOUT_MS="3000000"
   export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+
   exec claude "$@"
 }
 
@@ -327,13 +346,19 @@ switch_to_kimi() {
     exit 1
   fi
 
-  banner "Moonshot AI (kimi-k2)"
+  # Get configured model or use default
+  local kimi_model
+  kimi_model="$(get_config "kimi_model")"
+  kimi_model="${kimi_model:-kimi-for-coding}"
+
+  banner "Moonshot AI (${kimi_model})"
 
   export ANTHROPIC_BASE_URL="https://api.moonshot.ai/anthropic"
   export ANTHROPIC_AUTH_TOKEN="$kimi_key"
-  export ANTHROPIC_MODEL="kimi-k2-turbo-preview"
-  export ANTHROPIC_SMALL_FAST_MODEL="kimi-k2-turbo-preview"
+  export ANTHROPIC_MODEL="$kimi_model"
+  export ANTHROPIC_SMALL_FAST_MODEL="$kimi_model"
   export API_TIMEOUT_MS="3000000"
+
   exec claude "$@"
 }
 
@@ -360,6 +385,7 @@ switch_to_katcoder() {
   export ANTHROPIC_MODEL="KAT-Coder"
   export ANTHROPIC_SMALL_FAST_MODEL="KAT-Coder"
   export API_TIMEOUT_MS="3000000"
+
   exec claude "$@"
 }
 
@@ -387,7 +413,9 @@ switch_to_custom() {
 
   export ANTHROPIC_BASE_URL="$base_url"
   export ANTHROPIC_AUTH_TOKEN="$api_key"
+
   [ -n "$model" ] && export ANTHROPIC_MODEL="$model"
+
   exec claude "$@"
 }
 
@@ -432,6 +460,10 @@ cmd_test() {
           ;;
         kimi)
           export ANTHROPIC_BASE_URL="https://api.moonshot.ai/anthropic"
+          local kimi_model
+          kimi_model="$(get_config "kimi_model")"
+          kimi_model="${kimi_model:-kimi-for-coding}"
+          export ANTHROPIC_MODEL="$kimi_model"
           export API_TIMEOUT_MS="3000000"
           ;;
         katcoder)
