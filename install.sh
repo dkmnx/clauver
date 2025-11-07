@@ -167,7 +167,7 @@ echo
 if [ "$SCRIPT_SOURCE" = "local" ]; then
   echo -e "${BOLD}Installation methods:${NC}"
   echo "  Local install: $(basename "$0")"
-  echo -e "  Curl install:  ${GREEN}curl -fsSL https://raw.githubusercontent.com/dkmnx/clauver/main/clauver-installer.sh | bash${NC}"
+  echo -e "  Curl install:  ${GREEN}curl -fsSL https://raw.githubusercontent.com/dkmnx/clauver/main/install.sh | bash${NC}"
   echo
 fi
 
@@ -182,12 +182,17 @@ echo -e "   ${GREEN}clauver config kimi${NC}"
 echo -e "   ${GREEN}clauver config katcoder${NC}"
 echo -e "   ${GREEN}clauver config anthropic${NC}"
 echo
-echo " 3. Use a provider:"
-echo -e "   ${GREEN}clauver zai${NC}"
+echo " 3. Set a default provider (optional):"
+echo -e "   ${GREEN}clauver default zai${NC}       # Set Z.AI as default"
+echo -e "   ${GREEN}clauver default${NC}           # Show current default"
+echo
+echo " 4. Use a provider:"
+echo -e "   ${GREEN}clauver zai${NC}               # Use specific provider"
 echo -e "   ${GREEN}clauver minimax${NC}"
 echo -e "   ${GREEN}clauver anthropic${NC}"
+echo -e "   ${GREEN}clauver \"your prompt\"${NC}     # Use default provider"
 echo
-echo " 4. For all commands:"
+echo " 5. For all commands:"
 echo -e "   ${GREEN}clauver help${NC}"
 echo
 echo -e "${YELLOW}Auto-completion enabled!${NC}"
