@@ -1,3 +1,5 @@
+# clauver
+
 ```text
   ██████╗██╗      █████╗ ██╗   ██╗██╗   ██╗███████╗██████╗
  ██╔════╝██║     ██╔══██╗██║   ██║██║   ██║██╔════╝██╔══██╗
@@ -11,8 +13,6 @@
 [![Version](https://img.shields.io/badge/version-1.4.1-blue)](https://github.com/anthropics/claude-code)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# Clauver
-
 **Claude Code Provider Manager** - Switch between multiple Claude Code API providers seamlessly.
 
 ## Overview
@@ -21,9 +21,9 @@ _Clauver_ is a powerful CLI tool that allows you to easily manage and switch
 between different Claude Code API providers, including:
 
 - **Native Anthropic** - Use your existing Claude Pro/Team subscription
-- **Z.AI (GLM)** - Zhipu AI's GLM models
-- **MiniMax (MiniMax-M2)** - High-performance Chinese LLM
-- **Kimi (K2)** - Moonshot AI's Kimi K2 model
+- **Z.AI** - Zhipu AI's GLM models
+- **MiniMax** - MiniMax AI's MiniMax-M2 model
+- **Kimi** - Moonshot AI's Kimi K2 model
 - **KAT-Coder** - Kwaipilot's KAT-Coder
 - **Custom Providers** - Add your own provider
 
@@ -193,8 +193,6 @@ clauver config custom
 clauver my-provider "Hello"
 ```
 
-> _**⚠️ CAUTION**: This custom provider is not fully tested yet and may not work as expected. Use at your own risk._
-
 ## Auto-completion
 
 _Clauver_ includes auto-completion for `bash`, `zsh`, and `fish`.
@@ -254,11 +252,9 @@ _Clauver_ uses a two-file configuration system:
 
 ## Troubleshooting
 
-### PATH Issues
+### _PATH Issues_
 
-If `clauver` is not found after installation:
-
-Export the path for the current session.
+If `clauver` is not found after installation, export the path for the current session.
 
 ```bash
 export PATH="$HOME/.clauver/bin:$PATH"
@@ -280,7 +276,7 @@ echo 'set -gx PATH $HOME/.clauver/bin $PATH' >> ~/.config/fish/config.fish
 source ~/.config/fish/config.fish
 ```
 
-### Provider Test Fails
+### _Provider Test Fails_
 
 1. Make sure you have a valid API key and valid subscription or enough credits
 for the provider.
@@ -288,7 +284,7 @@ for the provider.
 3. Ensure you have internet connectivity
 4. Test the provider directly: `clauver test <provider>`
 
-### Claude Command Not Found
+### _Claude Command Not Found_
 
 Install Claude Code CLI:
 
@@ -298,4 +294,4 @@ npm install -g @anthropic-ai/claude-code
 
 ## License
 
-MIT (c) 2025 [dkmnx](https://github.com/dkmnx)
+[MIT](LICENSE) (c) 2025 [dkmnx](https://github.com/dkmnx)
