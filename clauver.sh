@@ -92,6 +92,71 @@ mask_key() {
   echo "${key:0:4}****${key: -4}"
 }
 
+get_latest_version() {
+  local latest_version
+  latest_version=$(curl -s "https://api.github.com/repos/dkmnx/clauver/tags" 2>/dev/null | python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null)
+  if [ -z "$latest_version" ]; then
+    error "Failed to fetch latest version from GitHub"
+    return 1
+  fi
+  echo "$latest_version"
+}
+
+cmd_version() {
+  local latest_version
+  echo "Current version: v${VERSION}"
+
+  latest_version=$(get_latest_version 2>/dev/null)
+  if [ $? -eq 0 ] && [ -n "$latest_version" ]; then
+    if [ "$VERSION" = "$latest_version" ]; then
+      success "You are on the latest version"
+    else
+      warn "Update available: v${latest_version}"
+      echo "Run 'clauver update' to upgrade"
+    fi
+  else
+    warn "Could not check for updates"
+  fi
+}
+
+cmd_update() {
+  local latest_version
+  local install_path
+  install_path="$(command -v clauver)"
+
+  if [ -z "$install_path" ]; then
+    error "Clauver installation not found in PATH"
+    return 1
+  fi
+
+  if [ ! -w "$(dirname "$install_path")" ]; then
+    error "No write permission to $(dirname "$install_path"). Try with sudo."
+    return 1
+  fi
+
+  latest_version=$(get_latest_version) || return 1
+
+  if [ "$VERSION" = "$latest_version" ]; then
+    success "Already on latest version (v${VERSION})"
+    return 0
+  fi
+
+  echo "Updating from v${VERSION} to v${latest_version}..."
+
+  local temp_file
+  temp_file=$(mktemp)
+
+  if curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null; then
+    chmod +x "$temp_file"
+    mv "$temp_file" "$install_path"
+    success "Update complete! Now running v${latest_version}"
+  else
+    rm -f "$temp_file"
+    error "Failed to download update"
+    return 1
+  fi
+}
+
 show_help() {
   echo "Clauver v${VERSION}"
   echo "Manage and switch between Claude Code providers"
@@ -105,33 +170,37 @@ show_help() {
   echo "  clauver <command> [args]"
   echo
   echo "Setup & Help:"
-  echo "  setup, -s            Interactive setup wizard for beginners"
-  echo "  help, -h, --help     Show this help message"
+  echo "  setup, -s               Interactive setup wizard for beginners"
+  echo "  help, -h, --help        Show this help message"
+  echo "  version, -v, --version  Show current version and check for updates"
+  echo "  update                  Update to the latest version"
   echo
   echo "Provider Management:"
-  echo "  list                 List all configured providers"
-  echo "  status               Check status of all providers"
-  echo "  config <provider>    Configure a specific provider"
-  echo "  test <provider>      Test a provider configuration"
-  echo "  default [provider]   Set or show default provider"
+  echo "  list                    List all configured providers"
+  echo "  status                  Check status of all providers"
+  echo "  config <provider>       Configure a specific provider"
+  echo "  test <provider>         Test a provider configuration"
+  echo "  default [provider]      Set or show default provider"
   echo
   echo "Switch Providers:"
-  echo "  anthropic            Use Native Anthropic (no API key needed)"
-  echo "  zai                  Switch to Z.AI provider"
-  echo "  minimax              Switch to MiniMax provider"
-  echo "  kimi                 Switch to Moonshot Kimi provider"
-  echo "  katcoder             Switch to KAT-Coder provider"
-  echo "  <custom>             Switch to your custom provider"
+  echo "  anthropic               Use Native Anthropic (no API key needed)"
+  echo "  zai                     Switch to Z.AI provider"
+  echo "  minimax                 Switch to MiniMax provider"
+  echo "  kimi                    Switch to Moonshot Kimi provider"
+  echo "  katcoder                Switch to KAT-Coder provider"
+  echo "  <custom>                Switch to your custom provider"
   echo
   echo "Examples:"
-  echo "  clauver setup        # Guided setup for first-time users"
-  echo "  clauver list         # Show all providers"
-  echo "  clauver config zai   # Configure Z.AI provider"
-  echo "  clauver test zai     # Test Z.AI provider"
-  echo "  clauver zai          # Use Z.AI for this session"
-  echo "  clauver anthropic    # Use Native Anthropic"
-  echo "  clauver default zai  # Set Z.AI as default provider"
-  echo "  clauver              # Use default provider (after setting one)"
+  echo "  clauver setup           # Guided setup for first-time users"
+  echo "  clauver list            # Show all providers"
+  echo "  clauver config zai      # Configure Z.AI provider"
+  echo "  clauver test zai        # Test Z.AI provider"
+  echo "  clauver zai             # Use Z.AI for this session"
+  echo "  clauver anthropic       # Use Native Anthropic"
+  echo "  clauver default zai     # Set Z.AI as default provider"
+  echo "  clauver version         # Check current version and updates"
+  echo "  clauver update          # Update to latest version"
+  echo "  clauver                 # Use default provider (after setting one)"
   echo
   echo "💡 Tips:"
   echo "  • Set a default: clauver default <provider>"
@@ -774,7 +843,10 @@ case "${1:-}" in
     show_help
     ;;
   version|-v|--version)
-    echo "${VERSION}"
+    cmd_version
+    ;;
+  update)
+    cmd_update
     ;;
   setup|-s)
     cmd_setup
