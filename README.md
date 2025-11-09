@@ -13,7 +13,8 @@
 [![Version](https://img.shields.io/badge/version-1.5.0-blue)](https://github.com/anthropics/claude-code)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-**Claude Code Provider Manager** - Switch between multiple Claude Code API providers seamlessly.
+**Claude Code Provider Manager** - Switch between multiple Claude Code API
+providers seamlessly.
 
 ## Overview
 
@@ -34,13 +35,14 @@ While it may work on other Unix-like systems (macOS, WSL), compatibility is not 
 ## Features
 
 - **Easy Provider Switching** - Switch providers with a single command
-- **Secure API Key Management** - Store and mask API keys safely
+- **Secure API Key Management** - API keys encrypted with age (X25519)
 - **Configuration Testing** - Test provider configurations before use
 - **Default Provider** - Set a default provider for quick access
 - **Auto-completion** - Tab completion for bash, zsh, and fish
 - **Quick Setup Wizard** - Interactive setup for beginners
 - **Status Monitoring** - Check all configured providers at once
 - **Self-Update** - Update to the latest version with a single command
+- **Encrypted Storage** - Secrets encrypted at rest, decrypted in memory only
 
 ## Credits
 
@@ -131,6 +133,7 @@ clauver "What can you help me with?"
 clauver list         # List all providers
 clauver status       # Check provider status
 clauver test <name>  # Test a provider
+clauver migrate      # Migrate plaintext secrets to encrypted storage
 clauver default      # Show or set default provider
 clauver version      # Show current version and check for updates
 clauver update       # Update to the latest version
@@ -195,6 +198,82 @@ clauver update
 # Update will show "already up to date" if on latest version
 ```
 
+## Encryption & Key Management
+
+### Encryption Overview
+
+Clauver automatically encrypts all API keys using
+[age](https://github.com/FiloSottile/age), a modern and secure file encryption
+tool. Your secrets are:
+
+- Encrypted at rest on disk
+- Only decrypted into memory when needed
+- Never written to disk as plaintext
+
+### Key Backup
+
+**CRITICAL**: Back up your encryption key immediately after installation!
+
+```bash
+# Your encryption key location
+~/.clauver/age.key
+
+# Back up your key (choose one method):
+cp ~/.clauver/age.key ~/backup/clauver-age.key.backup
+cp ~/.clauver/age.key /path/to/external/drive/
+```
+
+**Without your age key, you cannot decrypt your secrets!**
+
+### Key Recovery
+
+If you lose your encryption key:
+
+```bash
+# 1. If you have a backup, restore it:
+cp ~/backup/clauver-age.key.backup ~/.clauver/age.key
+chmod 600 ~/.clauver/age.key
+
+# 2. If you don't have a backup, you'll need to reconfigure:
+rm ~/.clauver/secrets.env.age  # Remove encrypted file
+clauver config <provider>       # Reconfigure your providers
+```
+
+### Migrating from Plaintext
+
+If you're upgrading from an older version with plaintext secrets:
+
+```bash
+# Check your current storage type
+clauver status
+
+# Migrate to encrypted storage
+clauver migrate
+
+# Verify encryption is active
+clauver status  # Should show "🔒 Secrets Storage: Encrypted"
+```
+
+### Using Configs on Multiple Machines
+
+Your encryption key is portable! To use your configs on another machine:
+
+```bash
+# On original machine - backup both files:
+cp ~/.clauver/age.key ~/backup/
+cp ~/.clauver/secrets.env.age ~/backup/
+
+# On new machine - restore both files:
+mkdir -p ~/.clauver
+cp ~/backup/age.key ~/.clauver/
+cp ~/backup/secrets.env.age ~/.clauver/
+chmod 600 ~/.clauver/age.key
+chmod 600 ~/.clauver/secrets.env.age
+
+# Verify it works:
+clauver list
+```
+
 ### Custom Provider
 
 ```bash
@@ -223,6 +302,7 @@ clauver z<TAB>            # Complete to 'clauver zai'
 ## Requirements
 
 - **claude CLI** - Install with: `npm install -g @anthropic-ai/claude-code`
+- **age** - For encryption: `sudo apt install age` (or `brew install age` on macOS)
 - **Bash/Zsh/Fish** - For auto-completion
 - **API Keys** - For third-party providers
 
@@ -242,12 +322,13 @@ clauver/
 
 ## Configuration Storage
 
-_Clauver_ uses a two-file configuration system:
+_Clauver_ uses an encrypted configuration system:
 
 ```text
 ~/.clauver/
-├── secrets.env            # API keys and sensitive data (chmod 600)
-├── config                 # Custom providers only (chmod 600)
+├── secrets.env.age        # Encrypted API keys (age encrypted)
+├── age.key                # Encryption key (chmod 600) - BACK THIS UP!
+├── config                 # Provider configurations (chmod 600)
 ├── bin/
 │   └── clauver           # Installed binary
 └── completions/          # Auto-completion files
@@ -255,16 +336,32 @@ _Clauver_ uses a two-file configuration system:
 
 ### Configuration Files
 
-- **secrets.env**: Stores API keys for all providers in uppercase format:
+- **secrets.env.age**: Encrypted API keys using age (X25519) encryption
   - `ZAI_API_KEY`
   - `MINIMAX_API_KEY`
   - `KIMI_API_KEY`
   - `KATCODER_API_KEY`
+  - Secrets are only decrypted into memory, never written to disk as plaintext
+
+- **age.key**: Your encryption key (automatically generated)
+  - **CRITICAL**: Back up this file! Without it, you cannot decrypt your secrets
+  - Portable across machines - copy this file to use your configs elsewhere
+  - Located at: `~/.clauver/age.key`
 
 - **config**: Stores provider configurations:
   - Base URLs, models, and endpoint IDs
   - Custom provider definitions
   - `default_provider` - Your preferred default provider
+
+### Security Features
+
+- **Encrypted at Rest**: API keys are encrypted using age (modern, secure encryption)
+- **Memory-Only Decryption**: Secrets decrypted directly into memory via
+  process substitution
+- **No Plaintext on Disk**: Encrypted file is never written as plaintext
+- **Session Caching**: Secrets decrypted once per session for performance
+- **Automatic Key Generation**: Encryption key auto-generated on first use
+- **Migration Support**: Seamlessly migrate from plaintext to encrypted storage
 
 ## Troubleshooting
 
@@ -306,6 +403,86 @@ Install Claude Code CLI:
 
 ```bash
 npm install -g @anthropic-ai/claude-code
+```
+
+### _API Key Won't Update_
+
+If updating an API key doesn't take effect:
+
+```bash
+# 1. Verify the new key was saved
+clauver list
+
+# 2. If it shows the old key, try reconfiguring
+clauver config <provider>
+
+# 3. Check your age key exists
+ls -la ~/.clauver/age.key
+
+# 4. If age key is missing, restore from backup or reconfigure
+```
+
+### _Encryption/Decryption Errors_
+
+If you see "Failed to decrypt secrets file" or similar errors:
+
+```bash
+# 1. Verify age is installed
+age --version
+
+# 2. Check if your age key exists and has correct permissions
+ls -la ~/.clauver/age.key
+chmod 600 ~/.clauver/age.key  # Fix permissions if needed
+
+# 3. If age key is corrupted or lost, restore from backup:
+cp ~/backup/clauver-age.key.backup ~/.clauver/age.key
+chmod 600 ~/.clauver/age.key
+
+# 4. If no backup exists, start fresh:
+rm ~/.clauver/secrets.env.age
+clauver config <provider>  # Reconfigure all providers
+```
+
+### _Missing age Command_
+
+If you see "age command not found":
+
+```bash
+# Debian/Ubuntu
+sudo apt install age
+
+# Fedora/RHEL
+sudo dnf install age
+
+# Arch Linux
+sudo pacman -S age
+
+# macOS
+brew install age
+
+# Verify installation
+age --version
+```
+
+### _Corrupted Configuration_
+
+If clauver behaves unexpectedly:
+
+```bash
+# 1. Check current configuration
+clauver list
+clauver status
+
+# 2. Backup your age key first (IMPORTANT!)
+cp ~/.clauver/age.key ~/age.key.backup
+
+# 3. Test decryption manually
+age -d -i ~/.clauver/age.key ~/.clauver/secrets.env.age
+
+# 4. If decryption fails, secrets file may be corrupted
+# Remove and reconfigure (your age key is still safe):
+rm ~/.clauver/secrets.env.age
+clauver config <provider>
 ```
 
 ## License
