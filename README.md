@@ -40,6 +40,7 @@ While it may work on other Unix-like systems (macOS, WSL), compatibility is not 
 - **Auto-completion** - Tab completion for bash, zsh, and fish
 - **Quick Setup Wizard** - Interactive setup for beginners
 - **Status Monitoring** - Check all configured providers at once
+- **Self-Update** - Update to the latest version with a single command
 
 ## Credits
 
@@ -131,6 +132,8 @@ clauver list         # List all providers
 clauver status       # Check provider status
 clauver test <name>  # Test a provider
 clauver default      # Show or set default provider
+clauver version      # Show current version and check for updates
+clauver update       # Update to the latest version
 clauver help         # Show help
 ```
 
@@ -177,6 +180,19 @@ clauver "Help me write a bash script"
 
 # Change your default anytime
 clauver default anthropic
+```
+
+### Version Management
+
+```bash
+# Check current version and available updates
+clauver version
+
+# Update to the latest version
+clauver update
+
+# Both commands work without confirmation prompts
+# Update will show "already up to date" if on latest version
 ```
 
 ### Custom Provider
