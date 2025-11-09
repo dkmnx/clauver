@@ -132,6 +132,22 @@ mkdir -p "$BASE" "$BIN"
 # Ensure age encryption key exists
 ensure_age_key
 
+# Check for existing plaintext secrets and prompt for migration
+if [ -f "$SECRETS" ] && [ ! -f "$BASE/secrets.env.age" ]; then
+  echo
+  warn "Found existing plaintext secrets file."
+  echo "For better security, clauver now encrypts all secrets."
+  echo
+  read -p "Would you like to migrate to encrypted storage now? [Y/n]: " -n 1 -r
+  echo
+  if [[ $REPLY =~ ^[Yy]$ ]] || [[ -z $REPLY ]]; then
+    log "Migration will be performed after installation completes."
+    NEEDS_MIGRATION=1
+  else
+    warn "Skipping migration. You can migrate later with: clauver migrate"
+  fi
+fi
+
 touch "$CONFIG"
 chmod 600 "$CONFIG"
 
@@ -258,3 +274,14 @@ echo -e "   ${GREEN}clauver help${NC}"
 echo
 echo -e "${YELLOW}Auto-completion enabled!${NC}"
 echo "  Try: clauver <TAB><TAB> to see available commands"
+
+# Run migration if needed
+if [ "${NEEDS_MIGRATION:-0}" -eq 1 ]; then
+  echo
+  log "Running migration to encrypted storage..."
+  if "$BIN/clauver" migrate; then
+    success "Migration complete!"
+  else
+    warn "Migration failed. You can try again with: clauver migrate"
+  fi
+fi
