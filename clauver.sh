@@ -56,10 +56,52 @@ ensure_age_key() {
 [ -f "$CONFIG" ] || true
 [ -f "$SECRETS" ] || true
 
+# Save secrets to encrypted file
+save_secrets() {
+  local temp_file
+  temp_file="$(mktemp)"
+
+  # Load existing secrets from encrypted file first
+  if [ -f "$SECRETS_AGE" ]; then
+    # shellcheck disable=SC1090
+    source <(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null) || true
+  elif [ -f "$SECRETS" ]; then
+    # shellcheck disable=SC1090
+    source "$SECRETS"
+  fi
+
+  # Write all current API key environment variables to temp file
+  {
+    [ -n "${ZAI_API_KEY:-}" ] && echo "ZAI_API_KEY=$ZAI_API_KEY"
+    [ -n "${MINIMAX_API_KEY:-}" ] && echo "MINIMAX_API_KEY=$MINIMAX_API_KEY"
+    [ -n "${KIMI_API_KEY:-}" ] && echo "KIMI_API_KEY=$KIMI_API_KEY"
+    [ -n "${KATCODER_API_KEY:-}" ] && echo "KATCODER_API_KEY=$KATCODER_API_KEY"
+  } > "$temp_file"
+
+  # Encrypt the temp file
+  if ! age -e -i "$AGE_KEY" < "$temp_file" > "$SECRETS_AGE"; then
+    rm -f "$temp_file"
+    error "Failed to encrypt secrets file"
+    return 1
+  fi
+
+  # Clean up
+  rm -f "$temp_file"
+  rm -f "$SECRETS"  # Remove plaintext file if it exists
+  chmod 600 "$SECRETS_AGE"
+}
+
 # Load secrets from secrets.env
 load_secrets() {
-  if [ -f "$SECRETS" ]; then
-    # Export all variables from secrets.env
+  if [ -f "$SECRETS_AGE" ]; then
+    # Decrypt and source from encrypted file
+    # shellcheck disable=SC1090
+    source <(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null) || {
+      error "Failed to decrypt secrets file. Check your age key."
+      return 1
+    }
+  elif [ -f "$SECRETS" ]; then
+    # Export all variables from secrets.env (backward compatibility)
     # shellcheck disable=SC1090
     source "$SECRETS"
   fi
@@ -71,10 +113,19 @@ get_config() {
   grep "^${key}=" "$CONFIG" 2>/dev/null | cut -d= -f2- || echo ""
 }
 
-# Get secret value from SECRETS file
+# Get secret value from environment
 get_secret() {
   local key="$1"
-  grep "^${key}=" "$SECRETS" 2>/dev/null | cut -d= -f2- || echo ""
+  local value
+  if [ -n "${!key:-}" ]; then
+    value="${!key}"
+  elif [ -f "$SECRETS" ]; then
+    # Fallback to plaintext file for backward compatibility
+    value="$(grep "^${key}=" "$SECRETS" 2>/dev/null | cut -d= -f2- || echo "")"
+  else
+    value=""
+  fi
+  echo "$value"
 }
 
 set_config() {
@@ -97,14 +148,24 @@ set_secret() {
   # Ensure age key exists before setting secrets
   ensure_age_key
 
-  local tmp
-  tmp="$(mktemp "${SECRETS}.XXXXXX")"
-  if [ -f "$SECRETS" ]; then
-    grep -v -E "^${key}=" "$SECRETS" > "$tmp" 2>/dev/null || true
+  # Migrate existing plaintext file if it exists
+  if [ -f "$SECRETS" ] && [ ! -f "$SECRETS_AGE" ]; then
+    log "Migrating existing secrets to encrypted storage..."
+    # Load existing secrets
+    # shellcheck disable=SC1090
+    source "$SECRETS"
+    # Save to encrypted format
+    save_secrets
   fi
-  printf '%s=%s\n' "$key" "$value" >> "$tmp"
-  mv "$tmp" "$SECRETS"
-  chmod 600 "$SECRETS"
+
+  # Load existing secrets into memory
+  load_secrets
+
+  # Set the new secret in environment
+  export "$key=$value"
+
+  # Save all secrets back to encrypted file
+  save_secrets
 }
 
 mask_key() {
