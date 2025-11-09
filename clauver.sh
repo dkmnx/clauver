@@ -7,6 +7,8 @@ VERSION="1.5.0"
 BASE="${CLAUVER_HOME:-$HOME/.clauver}"
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
+SECRETS_AGE="$BASE/secrets.env.age"
+AGE_KEY="$BASE/age.key"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -33,6 +35,22 @@ banner() {
   v${VERSION} - ${provider}
 BANNER
   printf "%b" "${NC}"
+}
+
+# Ensure age encryption key exists
+ensure_age_key() {
+  if [ ! -f "$AGE_KEY" ]; then
+    if ! command -v age-keygen &>/dev/null; then
+      error "age-keygen command not found. Please install 'age' package."
+      return 1
+    fi
+    log "Generating age encryption key..."
+    age-keygen -o "$AGE_KEY"
+    chmod 600 "$AGE_KEY"
+    success "Age encryption key generated at $AGE_KEY"
+    echo
+    warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
+  fi
 }
 
 [ -f "$CONFIG" ] || true
@@ -75,6 +93,10 @@ set_config() {
 set_secret() {
   local key="$1"
   local value="$2"
+
+  # Ensure age key exists before setting secrets
+  ensure_age_key
+
   local tmp
   tmp="$(mktemp "${SECRETS}.XXXXXX")"
   if [ -f "$SECRETS" ]; then

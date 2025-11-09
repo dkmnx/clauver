@@ -9,6 +9,7 @@ BASE="${CLAUVER_HOME:-$HOME/.clauver}"
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
 BIN="$BASE/bin"
+AGE_KEY="$BASE/age.key"
 
 # Detect if script is being run via curl
 
@@ -43,6 +44,23 @@ success() { echo -e "${GREEN}✓${NC} $*"; }
 warn() { echo -e "${YELLOW}!${NC} $*"; }
 error() { echo -e "${RED}✗${NC} $*" >&2; }
 
+# Ensure age encryption key exists
+ensure_age_key() {
+  if [ ! -f "$AGE_KEY" ]; then
+    log "Generating age encryption key..."
+    age-keygen -o "$AGE_KEY"
+    chmod 600 "$AGE_KEY"
+    success "Age encryption key generated at $AGE_KEY"
+    echo
+    echo -e "${YELLOW}IMPORTANT: Back up your age key!${NC}"
+    echo "The key file is: $AGE_KEY"
+    echo "Without this key, you cannot decrypt your secrets."
+    echo
+  else
+    success "Age encryption key found at $AGE_KEY"
+  fi
+}
+
 case "${SHELL##*/}" in
   zsh)  SHELL_RC="$HOME/.zshrc" ;;
   bash) SHELL_RC="$HOME/.bashrc" ;;
@@ -69,7 +87,50 @@ if ! command -v claude &>/dev/null; then
 fi
 success "'claude' command found."
 
+# Check for age encryption
+log "Checking for 'age' encryption..."
+if ! command -v age &>/dev/null; then
+  error "'age' command not found."
+  echo
+  echo "Clauver requires 'age' for encrypted secret storage."
+  echo "Please install it first:"
+  echo
+  case "$(uname -s)" in
+    Linux*)
+      echo -e " ${YELLOW}# Ubuntu/Debian:${NC}"
+      echo -e " ${YELLOW}sudo apt install age${NC}"
+      echo
+      echo -e " ${YELLOW}# Fedora/CentOS:${NC}"
+      echo -e " ${YELLOW}sudo dnf install age${NC}"
+      echo
+      echo -e " ${YELLOW}# Arch Linux:${NC}"
+      echo -e " ${YELLOW}sudo pacman -S age${NC}"
+      ;;
+    Darwin*)
+      echo -e " ${YELLOW}# macOS:${NC}"
+      echo -e " ${YELLOW}brew install age${NC}"
+      ;;
+    *)
+      echo -e " ${YELLOW}# From source:${NC}"
+      echo -e " ${YELLOW}go install github.com/FiloSottile/age/cmd/age@latest${NC}"
+      ;;
+  esac
+  echo
+  exit 1
+fi
+
+if ! command -v age-keygen &>/dev/null; then
+  error "'age-keygen' command not found."
+  echo "This should come with the 'age' package."
+  exit 1
+fi
+
+success "'age' encryption found."
+
 mkdir -p "$BASE" "$BIN"
+
+# Ensure age encryption key exists
+ensure_age_key
 
 touch "$CONFIG"
 chmod 600 "$CONFIG"
