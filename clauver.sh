@@ -7,6 +7,9 @@ VERSION="1.5.0"
 BASE="${CLAUVER_HOME:-$HOME/.clauver}"
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
+SECRETS_AGE="$BASE/secrets.env.age"
+AGE_KEY="$BASE/age.key"
+SECRETS_LOADED=0
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -35,16 +38,152 @@ BANNER
   printf "%b" "${NC}"
 }
 
+# Ensure age encryption key exists
+ensure_age_key() {
+  if [ ! -f "$AGE_KEY" ]; then
+    if ! command -v age-keygen &>/dev/null; then
+      error "age-keygen command not found. Please install 'age' package."
+      echo
+      echo "Installation instructions:"
+      echo "  • Debian/Ubuntu: sudo apt install age"
+      echo "  • Fedora/RHEL:   sudo dnf install age"
+      echo "  • Arch Linux:    sudo pacman -S age"
+      echo "  • macOS:         brew install age"
+      echo "  • From source:   https://github.com/FiloSottile/age"
+      return 1
+    fi
+    log "Generating age encryption key..."
+    age-keygen -o "$AGE_KEY"
+    chmod 600 "$AGE_KEY"
+    success "Age encryption key generated at $AGE_KEY"
+    echo
+    warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
+  fi
+}
+
 [ -f "$CONFIG" ] || true
 [ -f "$SECRETS" ] || true
 
+# Save secrets to encrypted file
+save_secrets() {
+  local temp_file
+  temp_file="$(mktemp)"
+
+  # Check if age command is available
+  if ! command -v age &>/dev/null; then
+    rm -f "$temp_file"
+    error "age command not found. Please install 'age' package."
+    echo
+    echo "Installation instructions:"
+    echo "  • Debian/Ubuntu: sudo apt install age"
+    echo "  • Fedora/RHEL:   sudo dnf install age"
+    echo "  • Arch Linux:    sudo pacman -S age"
+    echo "  • macOS:         brew install age"
+    echo "  • From source:   https://github.com/FiloSottile/age"
+    return 1
+  fi
+
+  # Check if key file exists
+  if [ ! -f "$AGE_KEY" ]; then
+    rm -f "$temp_file"
+    error "Age key not found at: $AGE_KEY"
+    echo
+    echo "Your encryption key is missing. To recover:"
+    echo "  1. If you have a backup of your key, restore it to: $AGE_KEY"
+    echo "  2. Otherwise, reconfigure your providers: clauver config <provider>"
+    echo "  3. The key will be regenerated automatically"
+    return 1
+  fi
+
+  # Write all current API key environment variables to temp file
+  {
+    [ -n "${ZAI_API_KEY:-}" ] && echo "ZAI_API_KEY=$ZAI_API_KEY"
+    [ -n "${MINIMAX_API_KEY:-}" ] && echo "MINIMAX_API_KEY=$MINIMAX_API_KEY"
+    [ -n "${KIMI_API_KEY:-}" ] && echo "KIMI_API_KEY=$KIMI_API_KEY"
+    [ -n "${KATCODER_API_KEY:-}" ] && echo "KATCODER_API_KEY=$KATCODER_API_KEY"
+  } > "$temp_file"
+
+  # Encrypt the temp file
+  if ! age -e -i "$AGE_KEY" < "$temp_file" > "$SECRETS_AGE" 2>/dev/null; then
+    rm -f "$temp_file"
+    error "Failed to encrypt secrets file"
+    echo "This might be due to:"
+    echo "  • Corrupted age key file"
+    echo "  • Insufficient disk space"
+    echo "  • Permission issues"
+    return 1
+  fi
+
+  # Clean up
+  rm -f "$temp_file"
+  rm -f "$SECRETS"  # Remove plaintext file if it exists
+  chmod 600 "$SECRETS_AGE"
+}
+
 # Load secrets from secrets.env
 load_secrets() {
-  if [ -f "$SECRETS" ]; then
-    # Export all variables from secrets.env
+  # Skip if already loaded in this session
+  [ "$SECRETS_LOADED" -eq 1 ] && return 0
+
+  if [ -f "$SECRETS_AGE" ]; then
+    # Check if age command is available
+    if ! command -v age &>/dev/null; then
+      error "age command not found. Please install 'age' package."
+      echo
+      echo "Installation instructions:"
+      echo "  • Debian/Ubuntu: sudo apt install age"
+      echo "  • Fedora/RHEL:   sudo dnf install age"
+      echo "  • Arch Linux:    sudo pacman -S age"
+      echo "  • macOS:         brew install age"
+      echo "  • From source:   https://github.com/FiloSottile/age"
+      return 1
+    fi
+
+    # Check if key file exists
+    if [ ! -f "$AGE_KEY" ]; then
+      error "Age key not found at: $AGE_KEY"
+      echo
+      echo "Your encryption key is missing. To recover:"
+      echo "  1. If you have a backup of your key, restore it to: $AGE_KEY"
+      echo "  2. Otherwise, you'll need to reconfigure your providers"
+      echo
+      echo "To start fresh:"
+      echo "  1. Remove encrypted file: rm $SECRETS_AGE"
+      echo "  2. Reconfigure providers: clauver config <provider>"
+      return 1
+    fi
+
+    # Test decryption first to catch corruption early
+    local decrypt_test
+    decrypt_test=$(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>&1)
+    local decrypt_exit=$?
+
+    if [ $decrypt_exit -ne 0 ]; then
+      error "Failed to decrypt secrets file"
+      echo
+      echo "Possible causes:"
+      echo "  • Corrupted encrypted file"
+      echo "  • Wrong or corrupted age key"
+      echo "  • File permissions issue"
+      echo
+      echo "To recover:"
+      echo "  1. Check your age key backup and restore if needed"
+      echo "  2. If file is corrupted, remove it: rm $SECRETS_AGE"
+      echo "  3. Reconfigure your providers: clauver config <provider>"
+      return 1
+    fi
+
+    # Decrypt and source from encrypted file (no plaintext written to disk)
+    # shellcheck disable=SC1090
+    source <(echo "$decrypt_test")
+  elif [ -f "$SECRETS" ]; then
+    # Export all variables from secrets.env (backward compatibility)
     # shellcheck disable=SC1090
     source "$SECRETS"
   fi
+
+  # Mark secrets as loaded
+  SECRETS_LOADED=1
 }
 
 # Get config value from CONFIG file
@@ -53,10 +192,16 @@ get_config() {
   grep "^${key}=" "$CONFIG" 2>/dev/null | cut -d= -f2- || echo ""
 }
 
-# Get secret value from SECRETS file
+# Get secret value from environment
 get_secret() {
   local key="$1"
-  grep "^${key}=" "$SECRETS" 2>/dev/null | cut -d= -f2- || echo ""
+
+  # Ensure secrets are loaded before accessing
+  load_secrets
+
+  # Return value from environment variable
+  local value="${!key:-}"
+  echo "$value"
 }
 
 set_config() {
@@ -75,14 +220,31 @@ set_config() {
 set_secret() {
   local key="$1"
   local value="$2"
-  local tmp
-  tmp="$(mktemp "${SECRETS}.XXXXXX")"
-  if [ -f "$SECRETS" ]; then
-    grep -v -E "^${key}=" "$SECRETS" > "$tmp" 2>/dev/null || true
+
+  # Ensure age key exists before setting secrets
+  ensure_age_key
+
+  # Migrate existing plaintext file if it exists
+  if [ -f "$SECRETS" ] && [ ! -f "$SECRETS_AGE" ]; then
+    log "Migrating existing secrets to encrypted storage..."
+    # Load existing secrets
+    # shellcheck disable=SC1090
+    source "$SECRETS"
+    # Save to encrypted format
+    save_secrets
   fi
-  printf '%s=%s\n' "$key" "$value" >> "$tmp"
-  mv "$tmp" "$SECRETS"
-  chmod 600 "$SECRETS"
+
+  # Load existing secrets into memory
+  load_secrets
+
+  # Set the new secret in environment
+  export "$key=$value"
+
+  # Save all secrets back to encrypted file
+  save_secrets
+
+  # Reset loaded flag to force reload on next access
+  SECRETS_LOADED=0
 }
 
 mask_key() {
@@ -181,6 +343,7 @@ show_help() {
   echo "  config <provider>       Configure a specific provider"
   echo "  test <provider>         Test a provider configuration"
   echo "  default [provider]      Set or show default provider"
+  echo "  migrate                 Migrate plaintext secrets to encrypted storage"
   echo
   echo "Switch Providers:"
   echo "  anthropic               Use Native Anthropic (no API key needed)"
@@ -198,6 +361,7 @@ show_help() {
   echo "  clauver zai             # Use Z.AI for this session"
   echo "  clauver anthropic       # Use Native Anthropic"
   echo "  clauver default zai     # Set Z.AI as default provider"
+  echo "  clauver migrate         # Encrypt plaintext secrets"
   echo "  clauver version         # Check current version and updates"
   echo "  clauver update          # Update to latest version"
   echo "  clauver                 # Use default provider (after setting one)"
@@ -214,7 +378,18 @@ cmd_list() {
   # Load secrets
   load_secrets
 
+  # Determine encryption status
+  local encryption_status
+  if [ -f "$SECRETS_AGE" ]; then
+    encryption_status="${GREEN}[encrypted]${NC}"
+  elif [ -f "$SECRETS" ]; then
+    encryption_status="${YELLOW}[plaintext]${NC}"
+  else
+    encryption_status=""
+  fi
+
   echo -e "${BOLD}Configured Providers:${NC}"
+  [ -n "$encryption_status" ] && echo -e "  Storage: $encryption_status"
   echo
 
   echo -e "${GREEN}✓ Native Anthropic${NC}"
@@ -269,7 +444,7 @@ cmd_list() {
     local api_key
     api_key="$(get_secret "$key_name")"
     if [ -z "$api_key" ]; then
-      echo "  - $provider (run: clauver config)"
+      echo "  - $provider (run: clauver config $provider)"
     fi
   done
 }
@@ -330,6 +505,11 @@ cmd_config() {
       fi
 
       success "${provider^^} configured. Use: clauver $provider"
+
+      # Show encryption status
+      if [ -f "$SECRETS_AGE" ]; then
+        echo -e "${GREEN}🔒 Secrets encrypted at: $SECRETS_AGE${NC}"
+      fi
       ;;
     custom)
       echo
@@ -608,6 +788,16 @@ cmd_status() {
   echo -e "${BOLD}Provider Status${NC}"
   echo
 
+  # Show encryption status
+  if [ -f "$SECRETS_AGE" ]; then
+    echo -e "${GREEN}🔒 Secrets Storage: Encrypted${NC}"
+  elif [ -f "$SECRETS" ]; then
+    echo -e "${YELLOW}⚠ Secrets Storage: Plaintext (run 'clauver migrate' to encrypt)${NC}"
+  else
+    echo -e "Secrets Storage: None configured"
+  fi
+  echo
+
   echo -e "${BOLD}Native Anthropic:${NC}"
   if command -v claude &>/dev/null; then
     success "Installed"
@@ -749,6 +939,58 @@ cmd_default() {
   esac
 }
 
+cmd_migrate() {
+  echo -e "${BOLD}Migrate Secrets to Encrypted Storage${NC}"
+  echo
+
+  # Check if already encrypted
+  if [ -f "$SECRETS_AGE" ] && [ ! -f "$SECRETS" ]; then
+    success "Secrets are already encrypted!"
+    echo "  Location: $SECRETS_AGE"
+    return 0
+  fi
+
+  # Check if plaintext file exists
+  if [ ! -f "$SECRETS" ]; then
+    warn "No plaintext secrets file found."
+    if [ -f "$SECRETS_AGE" ]; then
+      success "Encrypted secrets file already exists at: $SECRETS_AGE"
+    else
+      echo "No secrets to migrate. Configure a provider first:"
+      echo "  clauver config <provider>"
+    fi
+    return 0
+  fi
+
+  log "Found plaintext secrets file: $SECRETS"
+  echo
+
+  # Ensure age key exists
+  if ! ensure_age_key; then
+    error "Failed to ensure age key. Migration aborted."
+    return 1
+  fi
+
+  # Load existing plaintext secrets
+  log "Loading plaintext secrets..."
+  # shellcheck disable=SC1090
+  source "$SECRETS"
+
+  # Save to encrypted format
+  log "Encrypting secrets..."
+  if save_secrets; then
+    success "Secrets successfully encrypted!"
+    echo "  Encrypted file: $SECRETS_AGE"
+    echo "  Plaintext file: removed"
+    echo
+    warn "IMPORTANT: Back up your age key at: $AGE_KEY"
+    echo "Without this key, you cannot decrypt your secrets."
+  else
+    error "Failed to encrypt secrets."
+    return 1
+  fi
+}
+
 cmd_setup() {
   echo -e "${BOLD}${BLUE}"
   cat <<'EOF'
@@ -868,6 +1110,9 @@ case "${1:-}" in
   default)
     shift
     cmd_default "$@"
+    ;;
+  migrate)
+    cmd_migrate
     ;;
   anthropic)
     shift
