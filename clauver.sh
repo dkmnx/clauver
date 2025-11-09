@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 077
 
-VERSION="1.5.0"
+VERSION="1.6.0"
 BASE="${CLAUVER_HOME:-$HOME/.clauver}"
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
