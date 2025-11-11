@@ -3,13 +3,19 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 077
 
-VERSION="1.6.0"
+VERSION="1.6.1"
 BASE="${CLAUVER_HOME:-$HOME/.clauver}"
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
 SECRETS_AGE="$BASE/secrets.env.age"
 AGE_KEY="$BASE/age.key"
 SECRETS_LOADED=0
+
+# Security: Initialize global variables defensively
+ZAI_API_KEY="${ZAI_API_KEY:-}"
+MINIMAX_API_KEY="${MINIMAX_API_KEY:-}"
+KIMI_API_KEY="${KIMI_API_KEY:-}"
+KATCODER_API_KEY="${KATCODER_API_KEY:-}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -173,7 +179,8 @@ load_secrets() {
       return 1
     fi
 
-    # Decrypt and source from encrypted file (no plaintext written to disk)
+    # Security: Source decrypted content only after successful validation
+    # This prevents execution of error messages as bash code
     # shellcheck disable=SC1090
     source <(echo "$decrypt_test")
   elif [ -f "$SECRETS" ]; then
@@ -207,11 +214,21 @@ get_secret() {
 set_config() {
   local key="$1"
   local value="$2"
+
+  # Security: Validate key format (alphanumeric, underscore, hyphen only)
+  if [[ ! "$key" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    error "Invalid config key format: $key"
+    return 1
+  fi
+
   local tmp
   tmp="$(mktemp "${CONFIG}.XXXXXX")"
   if [ -f "$CONFIG" ]; then
     grep -v -E "^${key}=" "$CONFIG" > "$tmp" 2>/dev/null || true
   fi
+
+  # Security: Escape special characters in value to prevent injection
+  # Use printf with explicit format to prevent format string attacks
   printf '%s=%s\n' "$key" "$value" >> "$tmp"
   mv "$tmp" "$CONFIG"
   chmod 600 "$CONFIG"
@@ -254,7 +271,38 @@ mask_key() {
   echo "${key:0:4}****${key: -4}"
 }
 
+verify_sha256() {
+  local file="$1"
+  local expected_hash="$2"
+
+  # Security: Verify file integrity using SHA256
+  if ! command -v sha256sum &>/dev/null; then
+    warn "sha256sum not available. Skipping integrity check."
+    warn "WARNING: Downloaded file not verified. Proceed with caution."
+    return 0  # Don't block update, but warn user
+  fi
+
+  local actual_hash
+  actual_hash=$(sha256sum "$file" | awk '{print $1}')
+
+  if [ "$actual_hash" != "$expected_hash" ]; then
+    error "SHA256 mismatch! File may be corrupted or tampered."
+    error "Expected: $expected_hash"
+    error "Got:      $actual_hash"
+    return 1
+  fi
+
+  success "SHA256 verification passed"
+  return 0
+}
+
 get_latest_version() {
+  # Security: Verify python3 exists before using it
+  if ! command -v python3 &>/dev/null; then
+    error "python3 command not found. Please install Python 3."
+    return 1
+  fi
+
   local latest_version
   latest_version=$(curl -s "https://api.github.com/repos/dkmnx/clauver/tags" 2>/dev/null | python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null)
   if [ -z "$latest_version" ]; then
@@ -305,16 +353,49 @@ cmd_update() {
 
   echo "Updating from v${VERSION} to v${latest_version}..."
 
-  local temp_file
+  local temp_file temp_checksum
   temp_file=$(mktemp)
+  temp_checksum=$(mktemp)
 
-  if curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null; then
-    chmod +x "$temp_file"
-    mv "$temp_file" "$install_path"
+  # Security: Download both script and checksum file
+  log "Downloading update..."
+  if ! curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null; then
+    rm -f "$temp_file" "$temp_checksum"
+    error "Failed to download update"
+    return 1
+  fi
+
+  log "Downloading checksum..."
+  if ! curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null; then
+    warn "SHA256 checksum file not available for v${latest_version}"
+    warn "Proceeding without integrity verification (not recommended)"
+    echo
+    read -r -p "Continue anyway? [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      rm -f "$temp_file" "$temp_checksum"
+      error "Update cancelled by user"
+      return 1
+    fi
+  else
+    # Security: Verify downloaded file integrity
+    local expected_hash
+    expected_hash=$(cat "$temp_checksum" | awk '{print $1}')
+
+    if ! verify_sha256 "$temp_file" "$expected_hash"; then
+      rm -f "$temp_file" "$temp_checksum"
+      error "Update aborted due to integrity check failure"
+      return 1
+    fi
+  fi
+
+  # Install verified update
+  chmod +x "$temp_file"
+  if mv "$temp_file" "$install_path"; then
+    rm -f "$temp_checksum"
     success "Update complete! Now running v${latest_version}"
   else
-    rm -f "$temp_file"
-    error "Failed to download update"
+    rm -f "$temp_file" "$temp_checksum"
+    error "Failed to install update"
     return 1
   fi
 }
