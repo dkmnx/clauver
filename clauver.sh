@@ -72,12 +72,8 @@ ensure_age_key() {
 
 # Save secrets to encrypted file
 save_secrets() {
-  local temp_file
-  temp_file="$(mktemp)"
-
   # Check if age command is available
   if ! command -v age &>/dev/null; then
-    rm -f "$temp_file"
     error "age command not found. Please install 'age' package."
     echo
     echo "Installation instructions:"
@@ -91,7 +87,6 @@ save_secrets() {
 
   # Check if key file exists
   if [ ! -f "$AGE_KEY" ]; then
-    rm -f "$temp_file"
     error "Age key not found at: $AGE_KEY"
     echo
     echo "Your encryption key is missing. To recover:"
@@ -101,17 +96,15 @@ save_secrets() {
     return 1
   fi
 
-  # Write all current API key environment variables to temp file
-  {
-    [ -n "${ZAI_API_KEY:-}" ] && echo "ZAI_API_KEY=$ZAI_API_KEY"
-    [ -n "${MINIMAX_API_KEY:-}" ] && echo "MINIMAX_API_KEY=$MINIMAX_API_KEY"
-    [ -n "${KIMI_API_KEY:-}" ] && echo "KIMI_API_KEY=$KIMI_API_KEY"
-    [ -n "${KATCODER_API_KEY:-}" ] && echo "KATCODER_API_KEY=$KATCODER_API_KEY"
-  } > "$temp_file"
+  # Create secrets data in memory and encrypt directly
+  local secrets_data=""
+  [ -n "${ZAI_API_KEY:-}" ] && secrets_data="${secrets_data}ZAI_API_KEY=$ZAI_API_KEY"$'\n'
+  [ -n "${MINIMAX_API_KEY:-}" ] && secrets_data="${secrets_data}MINIMAX_API_KEY=$MINIMAX_API_KEY"$'\n'
+  [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=$KIMI_API_KEY"$'\n'
+  [ -n "${KATCODER_API_KEY:-}" ] && secrets_data="${secrets_data}KATCODER_API_KEY=$KATCODER_API_KEY"$'\n'
 
-  # Encrypt the temp file
-  if ! age -e -i "$AGE_KEY" < "$temp_file" > "$SECRETS_AGE" 2>/dev/null; then
-    rm -f "$temp_file"
+  # Encrypt directly from memory without temporary files
+  if ! printf '%s' "$secrets_data" | age -e -i "$AGE_KEY" > "$SECRETS_AGE" 2>/dev/null; then
     error "Failed to encrypt secrets file"
     echo "This might be due to:"
     echo "  • Corrupted age key file"
@@ -120,8 +113,7 @@ save_secrets() {
     return 1
   fi
 
-  # Clean up
-  rm -f "$temp_file"
+  # Clean up any existing plaintext file
   rm -f "$SECRETS"  # Remove plaintext file if it exists
   chmod 600 "$SECRETS_AGE"
 }
