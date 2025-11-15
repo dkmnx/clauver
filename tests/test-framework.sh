@@ -53,11 +53,17 @@ test_framework_init() {
     # Ensure AGE_KEY is updated to use the test CLAUVER_HOME
     export AGE_KEY="$CLAUVER_HOME/age.key"
 
-    # Initialize age key for tests
+    # Initialize age key for tests - generate real key for encryption tests
     if [ ! -f "$CLAUVER_HOME/age.key" ]; then
         mkdir -p "$CLAUVER_HOME"
-        echo "TEST_AGE_PRIVATE_KEY" | base64 -d > "$CLAUVER_HOME/age.key" 2>/dev/null || \
-        echo "TEST_AGE_PRIVATE_KEY" > "$CLAUVER_HOME/age.key"
+        if command -v age-keygen >/dev/null 2>&1; then
+            # Generate real age key for encryption tests
+            age-keygen -o "$CLAUVER_HOME/age.key" 2>/dev/null
+        else
+            # Fallback to fake key (but encryption tests will fail)
+            echo "TEST_AGE_PRIVATE_KEY" | base64 -d > "$CLAUVER_HOME/age.key" 2>/dev/null || \
+            echo "TEST_AGE_PRIVATE_KEY" > "$CLAUVER_HOME/age.key"
+        fi
         chmod 600 "$CLAUVER_HOME/age.key"
     fi
 

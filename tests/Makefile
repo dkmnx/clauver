@@ -4,41 +4,63 @@
 CLAUVER_SCRIPT = ../clauver.sh
 TEST_ROOT = .
 FRAMEWORK = $(TEST_ROOT)/test-framework.sh
+RUN_ALL_SCRIPT = $(TEST_ROOT)/run_all_tests.sh
 
 # Test files
 TEST_FILES = $(wildcard $(TEST_ROOT)/test_*.sh)
 TEST_NAMES = $(basename $(notdir $(TEST_FILES)))
 
 # Phony targets
-.PHONY: all test clean check coverage report help
+.PHONY: all test clean check coverage report help utilities encryption providers integration error_handling performance smoke ci setup_deps
 
 # Default target
-all: test
+all: setup_deps test
 
-# Run all tests
-test: $(TEST_NAMES)
+# Run all tests with proper environment
+test: setup_deps
+	@echo "==============================================="
+	@echo "Running complete test suite..."
+	@echo "==============================================="
+	@./run_all_tests.sh
 	@echo "==============================================="
 	@echo "All tests completed"
 	@echo "==============================================="
 
-# Individual test targets
-utilities: $(TEST_ROOT)/test_utilities.sh
-	@./run_all_tests.sh utilities
+# Setup dependencies and environment
+setup_deps:
+	@echo "Setting up test dependencies..."
+	@mkdir -p $(TEST_ROOT)/tmp
+	@mkdir -p $(TEST_ROOT)/logs
+	@mkdir -p $(TEST_ROOT)/reports
+	@export CLAUVER_TEST_MODE=1 || true
+	@which age >/dev/null 2>&1 || (echo "❌ 'age' command not found - required for encryption tests" && exit 1)
+	@test -f ../clauver.sh || (echo "❌ clauver.sh not found in parent directory" && exit 1)
+	@echo "✓ Dependencies satisfied"
 
-encryption: $(TEST_ROOT)/test_encryption_security.sh
-	@./run_all_tests.sh encryption
+# Individual test targets with environment setup and error handling
+utilities: setup_deps
+	@echo "Running utilities tests..."
+	@./run_all_tests.sh utilities || (echo "❌ Utilities tests failed" && exit 1)
 
-providers: $(TEST_ROOT)/test_providers.sh
-	@./run_all_tests.sh providers
+encryption: setup_deps
+	@echo "Running encryption tests..."
+	@./run_all_tests.sh encryption || (echo "❌ Encryption tests failed" && exit 1)
 
-integration: $(TEST_ROOT)/test_integration.sh
-	@./run_all_tests.sh integration
+providers: setup_deps
+	@echo "Running providers tests..."
+	@./run_all_tests.sh providers || (echo "❌ Providers tests failed" && exit 1)
 
-error_handling: $(TEST_ROOT)/test_error_handling.sh
-	@./run_all_tests.sh error_handling
+integration: setup_deps
+	@echo "Running integration tests..."
+	@./run_all_tests.sh integration || (echo "❌ Integration tests failed" && exit 1)
 
-performance: $(TEST_ROOT)/test_performance.sh
-	@./run_all_tests.sh performance
+error_handling: setup_deps
+	@echo "Running error handling tests..."
+	@./run_all_tests.sh error_handling || (echo "❌ Error handling tests failed" && exit 1)
+
+performance: setup_deps
+	@echo "Running performance tests..."
+	@./run_all_tests.sh performance || (echo "❌ Performance tests failed" && exit 1)
 
 # Run specific test
 specific:
@@ -82,7 +104,7 @@ shellcheck:
 	@shellcheck $(TEST_FILES) $(FRAMEWORK) 2>/dev/null || true
 
 # Run quick smoke test
-smoke:
+smoke: setup_deps
 	@echo "Running smoke test..."
 	@cd $(TEST_ROOT) && source $(FRAMEWORK) && test_framework_init
 	@echo "✓ Smoke test passed"
@@ -140,8 +162,3 @@ help:
 	@echo "  make clean              # Clean up all test artifacts"
 	@echo "  make coverage           # Generate coverage report"
 
-# Default run all tests
-test: $(TEST_NAMES)
-	@echo "==============================================="
-	@echo "All tests completed"
-	@echo "==============================================="
