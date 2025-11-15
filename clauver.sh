@@ -13,6 +13,31 @@ SECRETS_LOADED=0
 CONFIG_CACHE_LOADED=0
 declare -A CONFIG_CACHE=()
 
+# Configuration constants - extracted from hardcoded values
+declare -A PROVIDER_DEFAULTS=(
+  ["zai_base_url"]="https://api.z.ai/api/anthropic"
+  ["zai_default_model"]="glm-4.6"
+  ["minimax_base_url"]="https://api.minimax.io/anthropic"
+  ["minimax_default_model"]="MiniMax-M2"
+  ["kimi_base_url"]="https://api.kimi.com/coding/"
+  ["kimi_default_model"]="kimi-for-coding"
+)
+
+# Timeout and token limits
+declare -A PERFORMANCE_DEFAULTS=(
+  ["network_connect_timeout"]="10"
+  ["network_max_time"]="30"
+  ["minimax_small_fast_timeout"]="120"
+  ["minimax_small_fast_max_tokens"]="24576"
+  ["kimi_small_fast_timeout"]="240"
+  ["kimi_small_fast_max_tokens"]="200000"
+  ["test_api_timeout_ms"]="3000000"
+)
+
+# GitHub API configuration
+GITHUB_API_BASE="https://api.github.com/repos/dkmnx/clauver"
+RAW_CONTENT_BASE="https://raw.githubusercontent.com/dkmnx/clauver"
+
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
 YELLOW=$'\033[1;33m'
@@ -85,9 +110,6 @@ ensure_age_key() {
   fi
 }
 
-[ -f "$CONFIG" ] || true
-[ -f "$SECRETS" ] || true
-
 # Save secrets to encrypted file
 save_secrets() {
   # Check if age command is available
@@ -116,9 +138,9 @@ save_secrets() {
 
   # Create secrets data in memory and encrypt directly
   local secrets_data=""
-  [ -n "${ZAI_API_KEY:-}" ] && secrets_data="${secrets_data}ZAI_API_KEY=$ZAI_API_KEY"$'\n'
-  [ -n "${MINIMAX_API_KEY:-}" ] && secrets_data="${secrets_data}MINIMAX_API_KEY=$MINIMAX_API_KEY"$'\n'
-  [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=$KIMI_API_KEY"$'\n'
+  [ -n "${ZAI_API_KEY:-}" ] && secrets_data="${secrets_data}ZAI_API_KEY=${ZAI_API_KEY}"$'\n'
+  [ -n "${MINIMAX_API_KEY:-}" ] && secrets_data="${secrets_data}MINIMAX_API_KEY=${MINIMAX_API_KEY}"$'\n'
+  [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=${KIMI_API_KEY}"$'\n'
 
   # Encrypt directly from memory without temporary files
   log "Encrypting secrets..."
@@ -176,7 +198,9 @@ load_secrets() {
 
     # Test decryption first to catch corruption early
     log "Decrypting secrets..."
-    age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > /tmp/clauver_decrypt_$$_ 2>&1 &
+    local temp_decrypt
+    temp_decrypt=$(mktemp -t clauver_decrypt_XXXXXXXXXX)
+    age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
     local decrypt_pid=$!
     show_progress "Decrypting secrets file" "$decrypt_pid" 0.3
     wait "$decrypt_pid"
@@ -184,9 +208,9 @@ load_secrets() {
     local decrypt_exit=$?
     local decrypt_test=""
 
-    if [ -f "/tmp/clauver_decrypt_$$_" ]; then
-      decrypt_test=$(cat "/tmp/clauver_decrypt_$$_")
-      rm -f "/tmp/clauver_decrypt_$$_"
+    if [ -f "$temp_decrypt" ]; then
+      decrypt_test=$(cat "$temp_decrypt")
+      rm -f "$temp_decrypt"
     fi
 
     if [ $decrypt_exit -ne 0 ]; then
@@ -246,9 +270,12 @@ load_config_cache() {
   # Load config file into cache if it exists
   if [ -f "$CONFIG" ]; then
     while IFS="=" read -r key value; do
-      # Skip empty lines and comments
-      [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
-      CONFIG_CACHE["$key"]="$value"
+      # Skip empty lines, comments, and malformed lines
+      [[ -z "$key" || "$key" =~ ^[[:space:]]*# || -z "$value" ]] && continue
+      # Sanitize key format
+      if [[ "$key" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+        CONFIG_CACHE["$key"]="$value"
+      fi
     done < "$CONFIG"
   fi
 
@@ -367,17 +394,21 @@ get_latest_version() {
   log "Checking for updates..."
   local latest_version
   # Run curl in background with timeout for progress indicator
-  curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/dkmnx/clauver/tags" 2>/dev/null | \
-  python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null > /tmp/clauver_version_$$_ 2>&1 &
+  local temp_output
+  temp_output=$(mktemp -t clauver_version_XXXXXXXXXX)
+  curl -s --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
+    --max-time "${PERFORMANCE_DEFAULTS[network_max_time]}" \
+    "$GITHUB_API_BASE/tags" 2>/dev/null | \
+  python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null > "$temp_output" 2>&1 &
   local curl_pid=$!
 
   # Show progress for the network request
   show_progress "Checking GitHub API" "$curl_pid" 0.3
   wait "$curl_pid"
 
-  if [ -f "/tmp/clauver_version_$$_" ]; then
-    latest_version=$(cat "/tmp/clauver_version_$$_")
-    rm -f "/tmp/clauver_version_$$_"
+  if [ -f "$temp_output" ]; then
+    latest_version=$(cat "$temp_output")
+    rm -f "$temp_output"
   fi
 
   if [ -z "$latest_version" ]; then
@@ -436,7 +467,8 @@ cmd_update() {
   log "Starting download process..."
 
   # Download main script with progress indicator
-  curl -fsSL --connect-timeout 10 --max-time 60 "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null &
+  curl -fsSL --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
+    --max-time 60 "$RAW_CONTENT_BASE/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null &
   local download_pid=$!
   show_progress "Downloading clauver.sh v${latest_version}" "$download_pid" 0.2
   wait "$download_pid"
@@ -448,7 +480,9 @@ cmd_update() {
   fi
 
   # Download checksum file with progress indicator
-  curl -fsSL --connect-timeout 10 --max-time 30 "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null &
+  curl -fsSL --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
+    --max-time "${PERFORMANCE_DEFAULTS[network_max_time]}" \
+    "$RAW_CONTENT_BASE/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null &
   local checksum_pid=$!
   show_progress "Downloading integrity checksum" "$checksum_pid" 0.2
   wait "$checksum_pid"
@@ -576,12 +610,12 @@ cmd_list() {
       if [ "$provider" == "kimi" ]; then
         local kimi_model
         kimi_model="$(get_config "kimi_model")"
-        kimi_model="${kimi_model:-kimi-for-coding}"
+        kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
         echo "  Model: $kimi_model"
 
         local kimi_base_url
         kimi_base_url="$(get_config "kimi_base_url")"
-        kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+        kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
         echo "  Base URL: $kimi_base_url"
       fi
       echo
@@ -671,8 +705,8 @@ config_kimi_settings() {
   local current_model
   current_model="$(get_config "kimi_model")"
   [ -n "$current_model" ] && echo "Current model: $current_model"
-  read -r -p "Model (default: kimi-for-coding): " model
-  model="${model:-kimi-for-coding}"
+  read -r -p "Model (default: ${PROVIDER_DEFAULTS[kimi_default_model]}): " model
+  model="${model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
 
   # Validate model name
   if [ -n "$model" ] && ! validate_model_name "$model"; then
@@ -685,8 +719,8 @@ config_kimi_settings() {
   local current_url
   current_url="$(get_config "kimi_base_url")"
   [ -n "$current_url" ] && echo "Current base URL: $current_url"
-  read -r -p "Base URL (default: https://api.kimi.com/coding/): " url
-  url="${url:-https://api.kimi.com/coding/}"
+  read -r -p "Base URL (default: ${PROVIDER_DEFAULTS[kimi_base_url]}): " url
+  url="${url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
 
   # Validate URL
   if [ -n "$url" ] && ! validate_url "$url"; then
@@ -811,14 +845,14 @@ switch_to_provider() {
         local model
         model="$(get_config "${provider}_model")"
         if [ "$provider" = "kimi" ]; then
-          model="${model:-kimi-for-coding}"
+          model="${model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
         fi
         ;;
       "url")
         local url
         url="$(get_config "${provider}_base_url")"
         if [ "$provider" = "kimi" ]; then
-          url="${url:-https://api.kimi.com/coding/}"
+          url="${url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
         fi
         ;;
     esac
@@ -828,23 +862,23 @@ switch_to_provider() {
   case "$provider" in
     "zai")
       banner "Zhipu AI (GLM Models)"
-      export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4.6"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.6"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[zai_default_model]}"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[zai_default_model]}"
       ;;
     "minimax")
       banner "MiniMax (MiniMax-M2)"
-      export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
+      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="MiniMax-M2"
-      export ANTHROPIC_SMALL_FAST_MODEL="MiniMax-M2"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="MiniMax-M2"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="MiniMax-M2"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="MiniMax-M2"
-      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="120"
-      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="24576"
+      export ANTHROPIC_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_SMALL_FAST_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[minimax_small_fast_timeout]}"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[minimax_small_fast_max_tokens]}"
       ;;
     "kimi")
       banner "Moonshot AI (Kimi)"
@@ -855,8 +889,8 @@ switch_to_provider() {
       export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
       export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
       export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
-      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="240"
-      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="200000"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[kimi_small_fast_timeout]}"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[kimi_small_fast_max_tokens]}"
       ;;
       esac
 
@@ -1043,22 +1077,22 @@ cmd_test() {
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       case "$provider" in
         zai)
-          export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
           ;;
         minimax)
-          export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
-          export API_TIMEOUT_MS="3000000"
+          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
+          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
           ;;
         kimi)
           local kimi_base_url
           kimi_base_url="$(get_config "kimi_base_url")"
-          kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+          kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
           export ANTHROPIC_BASE_URL="$kimi_base_url"
           local kimi_model
           kimi_model="$(get_config "kimi_model")"
-          kimi_model="${kimi_model:-kimi-for-coding}"
+          kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
           export ANTHROPIC_MODEL="$kimi_model"
-          export API_TIMEOUT_MS="3000000"
+          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
           ;;
               esac
       timeout 10 claude "test" --dangerously-skip-permissions &>/dev/null &
@@ -1132,10 +1166,10 @@ cmd_status() {
       if [ "$provider" == "kimi" ]; then
         local kimi_model
         kimi_model="$(get_config "kimi_model")"
-        kimi_model="${kimi_model:-kimi-for-coding}"
+        kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
         local kimi_base_url
         kimi_base_url="$(get_config "kimi_base_url")"
-        kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+        kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
         echo "  Model: $kimi_model"
         echo "  URL: $kimi_base_url"
       fi
