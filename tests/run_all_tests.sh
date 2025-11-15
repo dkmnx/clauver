@@ -3,7 +3,7 @@
 # Test runner script for clauver comprehensive test suite
 
 # Source the test framework
-source "$(dirname "${BASH_SOURCE[0]}")/test-framework.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 
 # Disable exit on error for test runner (tests are expected to fail)
 set +e

@@ -45,7 +45,7 @@ jobs:
         # Check main script syntax
         bash -n ../clauver.sh
         # Check all test files syntax
-        bash -n test-framework.sh
+        bash -n test_framework.sh
         for test_file in test_*.sh; do
           bash -n "$test_file"
         done
@@ -53,7 +53,7 @@ jobs:
     - name: Run shellcheck
       run: |
         shellcheck --version
-        shellcheck ../clauver.sh test-framework.sh
+        shellcheck ../clauver.sh test_framework.sh
         for test_file in test_*.sh; do
           shellcheck "$test_file"
         done
@@ -104,7 +104,7 @@ jobs:
         cd tests
         echo "Running Windows-specific compatibility tests..."
         # Test basic functionality without full suite (some features may not work on Windows)
-        bash -c "source test-framework.sh && test_framework_init"
+        bash -c "source test_framework.sh && test_framework_init"
 
   security-scan:
     runs-on: ubuntu-latest

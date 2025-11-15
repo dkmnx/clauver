@@ -53,7 +53,7 @@ The test suite is organized into several categories:
 
 ## Test Framework
 
-The test suite uses a custom test framework (`test-framework.sh`) that provides:
+The test suite uses a custom test framework (`test_framework.sh`) that provides:
 
 - **Assertion Functions**: `assert_equals`, `assert_contains`, `assert_file_exists`, etc.
 - **Mocking System**: `mock_command`, `unmock_command` for external dependencies

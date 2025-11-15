@@ -3,7 +3,7 @@
 # Comprehensive encryption and security tests for clauver
 
 # Source the test framework first
-source "$(dirname "${BASH_SOURCE[0]}")/test-framework.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 
 # Initialize test framework before setting up environment
 test_framework_init

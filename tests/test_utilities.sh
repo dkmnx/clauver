@@ -4,7 +4,7 @@
 # Unit tests for clauver utility functions
 
 # Source the test framework (clauver.sh functions assumed to be available)
-source "$(dirname "${BASH_SOURCE[0]}")/test-framework.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 
 # Test suite for utility functions
 test_logging_functions() {

@@ -3,7 +3,7 @@
 # Error handling and edge case tests for clauver
 
 # Source the test framework and clauver script
-source "$(dirname "${BASH_SOURCE[0]}")/test-framework.sh"
+source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 source "$(dirname "${BASH_SOURCE[0]}")/../clauver.sh"
 
 # Test suite for error handling and edge cases

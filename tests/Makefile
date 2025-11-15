@@ -3,7 +3,7 @@
 # Configuration
 CLAUVER_SCRIPT = ../clauver.sh
 TEST_ROOT = .
-FRAMEWORK = $(TEST_ROOT)/test-framework.sh
+FRAMEWORK = $(TEST_ROOT)/test_framework.sh
 RUN_ALL_SCRIPT = $(TEST_ROOT)/run_all_tests.sh
 
 # Test files
