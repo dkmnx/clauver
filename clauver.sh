@@ -10,11 +10,8 @@ SECRETS="$BASE/secrets.env"
 SECRETS_AGE="$BASE/secrets.env.age"
 AGE_KEY="$BASE/age.key"
 SECRETS_LOADED=0
-
-# Security: Initialize global variables defensively
-ZAI_API_KEY="${ZAI_API_KEY:-}"
-MINIMAX_API_KEY="${MINIMAX_API_KEY:-}"
-KIMI_API_KEY="${KIMI_API_KEY:-}"
+CONFIG_CACHE_LOADED=0
+declare -A CONFIG_CACHE=()
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -27,6 +24,28 @@ log() { printf "${BLUE}→${NC} %s\n" "$*"; }
 success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
 warn() { printf "${YELLOW}!${NC} %s\n" "$*"; }
 error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
+
+# Progress indicator for long-running operations
+show_progress() {
+  local message="$1"
+  local pid="$2"
+  local delay="${3:-0.5}"
+  local spinner="${4:-⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏}"
+
+  printf "${BLUE}${spinner:0:1}${NC} %s..." "$message"
+
+  while kill -0 "$pid" 2>/dev/null; do
+    for ((i=1; i<${#spinner}; i++)); do
+      printf "\r${BLUE}${spinner:$i:1}${NC} %s..." "$message"
+      sleep "$delay"
+      if ! kill -0 "$pid" 2>/dev/null; then
+        break
+      fi
+    done
+  done
+
+  printf "\r${GREEN}✓${NC} %s completed\n" "$message"
+}
 
 banner() {
   provider="$1"
@@ -102,7 +121,13 @@ save_secrets() {
   [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=$KIMI_API_KEY"$'\n'
 
   # Encrypt directly from memory without temporary files
-  if ! printf '%s' "$secrets_data" | age -e -i "$AGE_KEY" > "$SECRETS_AGE" 2>/dev/null; then
+  log "Encrypting secrets..."
+  printf '%s' "$secrets_data" | age -e -i "$AGE_KEY" > "$SECRETS_AGE" 2>/dev/null &
+  local encrypt_pid=$!
+  show_progress "Encrypting secrets file" "$encrypt_pid" 0.3
+  wait "$encrypt_pid"
+
+  if [ ! -s "$SECRETS_AGE" ]; then
     error "Failed to encrypt secrets file"
     echo "This might be due to:"
     echo "  • Corrupted age key file"
@@ -150,9 +175,19 @@ load_secrets() {
     fi
 
     # Test decryption first to catch corruption early
-    local decrypt_test
-    decrypt_test=$(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>&1)
+    log "Decrypting secrets..."
+    age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > /tmp/clauver_decrypt_$$_ 2>&1 &
+    local decrypt_pid=$!
+    show_progress "Decrypting secrets file" "$decrypt_pid" 0.3
+    wait "$decrypt_pid"
+
     local decrypt_exit=$?
+    local decrypt_test=""
+
+    if [ -f "/tmp/clauver_decrypt_$$_" ]; then
+      decrypt_test=$(cat "/tmp/clauver_decrypt_$$_")
+      rm -f "/tmp/clauver_decrypt_$$_"
+    fi
 
     if [ $decrypt_exit -ne 0 ]; then
       error "Failed to decrypt secrets file"
@@ -183,10 +218,42 @@ load_secrets() {
   SECRETS_LOADED=1
 }
 
-# Get config value from CONFIG file
+# Get config value from CONFIG file with caching
 get_config() {
   local key="$1"
-  grep "^${key}=" "$CONFIG" 2>/dev/null | cut -d= -f2- || echo ""
+
+  # Load config cache if not already loaded
+  if [ "$CONFIG_CACHE_LOADED" -eq 0 ]; then
+    load_config_cache
+  fi
+
+  # Return from cache with proper check for empty values
+  if [[ -v "CONFIG_CACHE[$key]" ]]; then
+    echo "${CONFIG_CACHE[$key]}"
+  else
+    echo ""
+  fi
+}
+
+# Load config file into cache for performance
+load_config_cache() {
+  # Skip if already loaded in this session
+  [ "$CONFIG_CACHE_LOADED" -eq 1 ] && return 0
+
+  # Clear cache
+  CONFIG_CACHE=()
+
+  # Load config file into cache if it exists
+  if [ -f "$CONFIG" ]; then
+    while IFS="=" read -r key value; do
+      # Skip empty lines and comments
+      [[ -z "$key" || "$key" =~ ^[[:space:]]*# ]] && continue
+      CONFIG_CACHE["$key"]="$value"
+    done < "$CONFIG"
+  fi
+
+  # Mark cache as loaded
+  CONFIG_CACHE_LOADED=1
 }
 
 # Get secret value from environment
@@ -222,6 +289,10 @@ set_config() {
   printf '%s=%s\n' "$key" "$value" >> "$tmp"
   mv "$tmp" "$CONFIG"
   chmod 600 "$CONFIG"
+
+  # Invalidate cache to force reload on next access
+  CONFIG_CACHE_LOADED=0
+  CONFIG_CACHE=()
 }
 
 set_secret() {
@@ -293,8 +364,22 @@ get_latest_version() {
     return 1
   fi
 
+  log "Checking for updates..."
   local latest_version
-  latest_version=$(curl -s "https://api.github.com/repos/dkmnx/clauver/tags" 2>/dev/null | python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null)
+  # Run curl in background with timeout for progress indicator
+  curl -s --connect-timeout 10 --max-time 30 "https://api.github.com/repos/dkmnx/clauver/tags" 2>/dev/null | \
+  python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null > /tmp/clauver_version_$$_ 2>&1 &
+  local curl_pid=$!
+
+  # Show progress for the network request
+  show_progress "Checking GitHub API" "$curl_pid" 0.3
+  wait "$curl_pid"
+
+  if [ -f "/tmp/clauver_version_$$_" ]; then
+    latest_version=$(cat "/tmp/clauver_version_$$_")
+    rm -f "/tmp/clauver_version_$$_"
+  fi
+
   if [ -z "$latest_version" ]; then
     error "Failed to fetch latest version from GitHub"
     return 1
@@ -348,15 +433,27 @@ cmd_update() {
   temp_checksum=$(mktemp)
 
   # Security: Download both script and checksum file
-  log "Downloading update..."
-  if ! curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null; then
+  log "Starting download process..."
+
+  # Download main script with progress indicator
+  curl -fsSL --connect-timeout 10 --max-time 60 "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null &
+  local download_pid=$!
+  show_progress "Downloading clauver.sh v${latest_version}" "$download_pid" 0.2
+  wait "$download_pid"
+
+  if [ ! -s "$temp_file" ]; then
     rm -f "$temp_file" "$temp_checksum"
     error "Failed to download update"
     return 1
   fi
 
-  log "Downloading checksum..."
-  if ! curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null; then
+  # Download checksum file with progress indicator
+  curl -fsSL --connect-timeout 10 --max-time 30 "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null &
+  local checksum_pid=$!
+  show_progress "Downloading integrity checksum" "$checksum_pid" 0.2
+  wait "$checksum_pid"
+
+  if [ ! -s "$temp_checksum" ]; then
     warn "SHA256 checksum file not available for v${latest_version}"
     warn "Proceeding without integrity verification (not recommended)"
     echo
@@ -927,7 +1024,7 @@ cmd_test() {
       if timeout 5 claude --version &>/dev/null; then
         success "Native Anthropic is working"
       else
-        error "✗ Native Anthropic test failed"
+        error "Native Anthropic test failed"
       fi
       ;;
     zai|minimax|kimi)
@@ -971,7 +1068,7 @@ cmd_test() {
         success "${provider^^} configuration is valid"
         kill $test_pid 2>/dev/null || true
       else
-        error "✗ ${provider^^} test failed"
+        error "${provider^^} test failed"
       fi
       ;;
     *)
@@ -993,7 +1090,7 @@ cmd_test() {
         success "$provider configuration is valid"
         kill $test_pid 2>/dev/null || true
       else
-        error "✗ $provider test failed"
+        error "$provider test failed"
       fi
       ;;
   esac
@@ -1020,7 +1117,7 @@ cmd_status() {
   if command -v claude &>/dev/null; then
     success "Installed"
   else
-    error "✗ Not installed"
+    error "Not installed"
   fi
   echo
 
@@ -1043,7 +1140,7 @@ cmd_status() {
         echo "  URL: $kimi_base_url"
       fi
     else
-      warn "○ Not configured"
+      warn "Not configured"
     fi
     echo
   done
