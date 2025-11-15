@@ -428,7 +428,10 @@ get_latest_version() {
     return 1
   fi
 
-  log "Checking for updates..."
+  # Only show log message if not being captured (when stdout is a terminal)
+  if [ -t 1 ]; then
+    log "Checking for updates..."
+  fi
   local latest_version=""
   # Run curl in background with timeout for progress indicator
   local temp_output
@@ -440,7 +443,9 @@ get_latest_version() {
   local curl_pid=$!
 
   # Show progress for the network request
-  show_progress "Checking GitHub API" "$curl_pid" 0.3
+  if [ -t 1 ]; then
+    show_progress "Checking GitHub API" "$curl_pid" 0.3
+  fi
   wait "$curl_pid"
 
   if [ -f "$temp_output" ]; then
@@ -491,9 +496,26 @@ cmd_update() {
 
   latest_version=$(get_latest_version) || return 1
 
+  # Validate that we got a proper version string
+  if [ -z "$latest_version" ]; then
+    error "Failed to determine latest version"
+    return 1
+  fi
+
   if [ "$VERSION" = "$latest_version" ]; then
     success "Already on latest version (v${VERSION})"
     return 0
+  fi
+
+  # Prevent accidental rollback from pre-release to older stable version
+  if [ "$VERSION" != "$(printf '%s\n' "$VERSION" "$latest_version" | sort -V | head -n1)" ]; then
+    warn "You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
+    echo
+    read -r -p "Rollback to v${latest_version}? This will downgrade your version. [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      echo "Update cancelled."
+      return 0
+    fi
   fi
 
   echo "Updating from v${VERSION} to v${latest_version}..."
