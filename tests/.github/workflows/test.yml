@@ -96,9 +96,12 @@ jobs:
         bashate ../clauver.sh tests/*.sh
 
     - name: Check for secrets
-      uses: gitleaks/gitleaks-action@v1
-      with:
-        args: "--verbose --no-git"
+      run: |
+        # Install gitleaks
+        wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz
+        tar -xzf gitleaks_8.18.0_linux_x64.tar.gz
+        chmod +x gitleaks
+        ./gitleaks --verbose --no-git
 
     - name: Dependency check
       run: |
