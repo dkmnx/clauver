@@ -324,8 +324,6 @@ test_age_key_backup() {
 
     # Create initial age key
     ensure_age_key
-    local original_key_content
-    original_key_content=$(cat "$CLAUVER_HOME/age.key")
 
     # Create some encrypted secrets
     export ZAI_API_KEY="backup-test-key"
