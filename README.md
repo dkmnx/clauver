@@ -307,15 +307,48 @@ clauver z<TAB>            # Complete to 'clauver zai'
 
 ```text
 clauver/
-├── clauver.sh              # Main CLI script
-├── install.sh    # Installation script
-├── completion/             # Auto-completion files
+├── clauver.sh                      # Main CLI script
+├── install.sh                      # Installation script
+├── completion/                     # Auto-completion files
 │   ├── clauver.bash
 │   ├── clauver.zsh
 │   └── clauver.fish
-├── README.md               # This file
-└── LICENSE                 # MIT license
+├── tests/                          # Test suite
+│   ├── test_framework.sh           # Core testing framework
+│   ├── run_all_tests.sh            # Test runner
+│   ├── Makefile                    # Test utilities
+│   ├── README.md                   # Test documentation
+│   ├── test_*.sh                   # Individual test modules
+│   └── .github/workflows/test.yml  # CI/CD pipeline
+├── README.md                       # This file
+└── LICENSE                         # MIT license
 ```
+
+## Testing
+
+_Clauver_ includes a comprehensive test suite with unit tests, integration tests, security validation, and performance benchmarks.
+
+### Quick Test
+
+```bash
+# Run all tests
+cd tests/
+make test
+
+# Or use the test runner
+./run_all_tests.sh
+```
+
+### Full Documentation
+
+For detailed testing information, including:
+
+- Test categories and coverage areas
+- CI/CD pipeline and continuous integration
+- Security testing and performance benchmarks
+- Contributing guidelines for tests
+
+👉 **See [tests/README.md](tests/README.md)** for complete testing documentation.
 
 ## Configuration Storage
 
