@@ -49,6 +49,13 @@ _Clauver_ is heavily inspired by **[clother](https://github.com/jolehuit/clother
 by [jolehuit](https://github.com/jolehuit).
 Special thanks to the original project for the inspiration and architectural concepts.
 
+## Requirements
+
+- **claude CLI** - Install with: `npm install -g @anthropic-ai/claude-code`
+- **age** - For encryption: `sudo apt install age` (or `brew install age` on macOS)
+- **Bash/Zsh/Fish** - For auto-completion
+- **API Keys** - For third-party providers
+
 ## Installation
 
 ### Quick Install
@@ -296,37 +303,10 @@ clauver <TAB><TAB>        # Show available commands
 clauver z<TAB>            # Complete to 'clauver zai'
 ```
 
-## Requirements
-
-- **claude CLI** - Install with: `npm install -g @anthropic-ai/claude-code`
-- **age** - For encryption: `sudo apt install age` (or `brew install age` on macOS)
-- **Bash/Zsh/Fish** - For auto-completion
-- **API Keys** - For third-party providers
-
-## Architecture
-
-```text
-clauver/
-├── clauver.sh                      # Main CLI script
-├── install.sh                      # Installation script
-├── completion/                     # Auto-completion files
-│   ├── clauver.bash
-│   ├── clauver.zsh
-│   └── clauver.fish
-├── tests/                          # Test suite
-│   ├── test_framework.sh           # Core testing framework
-│   ├── run_all_tests.sh            # Test runner
-│   ├── Makefile                    # Test utilities
-│   ├── README.md                   # Test documentation
-│   ├── test_*.sh                   # Individual test modules
-│   └── .github/workflows/test.yml  # CI/CD pipeline
-├── README.md                       # This file
-└── LICENSE                         # MIT license
-```
-
 ## Testing
 
-_Clauver_ includes a comprehensive test suite with unit tests, integration tests, security validation, and performance benchmarks.
+_Clauver_ includes a comprehensive test suite with unit tests, integration tests,
+security validation, and performance benchmarks.
 
 ### Quick Test
 
@@ -348,7 +328,7 @@ For detailed testing information, including:
 - Security testing and performance benchmarks
 - Contributing guidelines for tests
 
-👉 **See [tests/README.md](tests/README.md)** for complete testing documentation.
+👉 See **[tests/README.md](tests/README.md)** for complete testing documentation.
 
 ## Configuration Storage
 
@@ -394,125 +374,15 @@ _Clauver_ uses an encrypted configuration system:
 
 ## Troubleshooting
 
-### _PATH Issues_
+Having issues? See complete **[troubleshooting](TROUBLESHOOTING.md)** guide.
 
-If `clauver` is not found after installation, export the path for the current session.
+Common fixes:
 
-```bash
-export PATH="$HOME/.clauver/bin:$PATH"
-```
-
-Make it permanent by adding the path to your shell config file.
-
-```bash
-# Bash
-echo 'export PATH="$HOME/.clauver/bin:$PATH"' >> ~/.bashrc
-source ~/.bashrc
-
-# Zsh
-echo 'export PATH="$HOME/.clauver/bin:$PATH"' >> ~/.zshrc
-source ~/.zshrc
-
-# Fish
-echo 'set -gx PATH $HOME/.clauver/bin $PATH' >> ~/.config/fish/config.fish
-source ~/.config/fish/config.fish
-```
-
-### _Provider Test Fails_
-
-1. Make sure you have a valid API key and valid subscription or enough credits
-for the provider.
-2. Check your API key is correctly configured: `clauver list`
-3. Ensure you have internet connectivity
-4. Test the provider directly: `clauver test <provider>`
-
-### _Claude Command Not Found_
-
-Install Claude Code CLI:
-
-```bash
-npm install -g @anthropic-ai/claude-code
-```
-
-### _API Key Won't Update_
-
-If updating an API key doesn't take effect:
-
-```bash
-# 1. Verify the new key was saved
-clauver list
-
-# 2. If it shows the old key, try reconfiguring
-clauver config <provider>
-
-# 3. Check your age key exists
-ls -la ~/.clauver/age.key
-
-# 4. If age key is missing, restore from backup or reconfigure
-```
-
-### _Encryption/Decryption Errors_
-
-If you see "Failed to decrypt secrets file" or similar errors:
-
-```bash
-# 1. Verify age is installed
-age --version
-
-# 2. Check if your age key exists and has correct permissions
-ls -la ~/.clauver/age.key
-chmod 600 ~/.clauver/age.key  # Fix permissions if needed
-
-# 3. If age key is corrupted or lost, restore from backup:
-cp ~/backup/clauver-age.key.backup ~/.clauver/age.key
-chmod 600 ~/.clauver/age.key
-
-# 4. If no backup exists, start fresh:
-rm ~/.clauver/secrets.env.age
-clauver config <provider>  # Reconfigure all providers
-```
-
-### _Missing age Command_
-
-If you see "age command not found":
-
-```bash
-# Debian/Ubuntu
-sudo apt install age
-
-# Fedora/RHEL
-sudo dnf install age
-
-# Arch Linux
-sudo pacman -S age
-
-# macOS
-brew install age
-
-# Verify installation
-age --version
-```
-
-### _Corrupted Configuration_
-
-If clauver behaves unexpectedly:
-
-```bash
-# 1. Check current configuration
-clauver list
-clauver status
-
-# 2. Backup your age key first (IMPORTANT!)
-cp ~/.clauver/age.key ~/age.key.backup
-
-# 3. Test decryption manually
-age -d -i ~/.clauver/age.key ~/.clauver/secrets.env.age
-
-# 4. If decryption fails, secrets file may be corrupted
-# Remove and reconfigure (your age key is still safe):
-rm ~/.clauver/secrets.env.age
-clauver config <provider>
-```
+- **PATH issues**: `export PATH="$HOME/.clauver/bin:$PATH"`
+- **Missing dependencies**: `npm install -g @anthropic-ai/claude-code`
+- **age encryption**: `sudo apt install age` (or `brew install age`)
+- **Provider tests**: `clauver test <provider>`
+- **Status check**: `clauver status`
 
 ## License
 

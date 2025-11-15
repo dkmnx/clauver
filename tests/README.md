@@ -1,6 +1,8 @@
 # Clauver Test Suite
 
-A comprehensive test suite for the clauver bash-based CLI tool that manages multiple Claude Code API providers. This test suite includes unit tests, integration tests, security tests, and performance benchmarks.
+A comprehensive test suite for the clauver bash-based CLI tool that manages
+multiple Claude Code API providers. This test suite includes unit tests,
+integration tests, security tests, and performance benchmarks.
 
 ## Test Architecture
 
@@ -53,9 +55,11 @@ The test suite is organized into several categories:
 
 ## Test Framework
 
-The test suite uses a custom test framework (`test_framework.sh`) that provides:
+The test suite uses a custom test framework (`test_framework.sh`)
+that provides:
 
-- **Assertion Functions**: `assert_equals`, `assert_contains`, `assert_file_exists`, etc.
+- **Assertion Functions**: `assert_equals`, `assert_contains`,
+  `assert_file_exists`, etc.
 - **Mocking System**: `mock_command`, `unmock_command` for external dependencies
 - **Environment Management**: `setup_test_environment`, `cleanup_test_environment`
 - **Progress Indicators**: Real-time test progress and feedback
@@ -339,4 +343,5 @@ The clauver test suite follows the same license as the main clauver project.
 
 ---
 
-For issues, questions, or contributions, please refer to the main clauver project repository.
+For issues, questions, or contributions, please refer to the main clauver
+project repository.
