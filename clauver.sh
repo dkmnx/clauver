@@ -15,7 +15,6 @@ SECRETS_LOADED=0
 ZAI_API_KEY="${ZAI_API_KEY:-}"
 MINIMAX_API_KEY="${MINIMAX_API_KEY:-}"
 KIMI_API_KEY="${KIMI_API_KEY:-}"
-KATCODER_API_KEY="${KATCODER_API_KEY:-}"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -101,7 +100,6 @@ save_secrets() {
   [ -n "${ZAI_API_KEY:-}" ] && secrets_data="${secrets_data}ZAI_API_KEY=$ZAI_API_KEY"$'\n'
   [ -n "${MINIMAX_API_KEY:-}" ] && secrets_data="${secrets_data}MINIMAX_API_KEY=$MINIMAX_API_KEY"$'\n'
   [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=$KIMI_API_KEY"$'\n'
-  [ -n "${KATCODER_API_KEY:-}" ] && secrets_data="${secrets_data}KATCODER_API_KEY=$KATCODER_API_KEY"$'\n'
 
   # Encrypt directly from memory without temporary files
   if ! printf '%s' "$secrets_data" | age -e -i "$AGE_KEY" > "$SECRETS_AGE" 2>/dev/null; then
@@ -423,7 +421,6 @@ show_help() {
   echo "  zai                     Switch to Z.AI provider"
   echo "  minimax                 Switch to MiniMax provider"
   echo "  kimi                    Switch to Moonshot Kimi provider"
-  echo "  katcoder                Switch to KAT-Coder provider"
   echo "  <custom>                Switch to your custom provider"
   echo
   echo "Examples:"
@@ -470,7 +467,7 @@ cmd_list() {
   echo "  Description: Use your Claude Pro/Team subscription"
   echo
 
-  for provider in zai minimax kimi katcoder; do
+  for provider in zai minimax kimi; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -512,7 +509,7 @@ cmd_list() {
   fi
 
   echo -e "${YELLOW}Not Configured:${NC}"
-  for provider in zai minimax kimi katcoder; do
+  for provider in zai minimax kimi; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -526,7 +523,7 @@ cmd_list() {
 config_show_usage() {
   error "Usage: clauver config <provider>"
   echo
-  echo "Available providers: anthropic, zai, minimax, kimi, katcoder, custom"
+  echo "Available providers: anthropic, zai, minimax, kimi, custom"
   echo "Example: clauver config zai"
 }
 
@@ -558,9 +555,6 @@ config_standard_provider() {
 
   # Provider-specific configuration
   case "$provider" in
-    "katcoder")
-      config_katcoder_endpoint
-      ;;
     "kimi")
       config_kimi_settings
       ;;
@@ -574,20 +568,6 @@ config_standard_provider() {
   fi
 }
 
-config_katcoder_endpoint() {
-  local endpoint_id
-  endpoint_id="$(get_config "katcoder_endpoint_id")"
-  [ -n "$endpoint_id" ] && echo "Current endpoint: $endpoint_id"
-  read -r -p "Endpoint ID (e.g., ep-xxx-xxx): " endpoint
-  [ -z "$endpoint" ] && { error "Endpoint ID is required"; return 1; }
-
-  # Validate endpoint ID
-  if ! validate_endpoint_id "$endpoint"; then
-    return 1
-  fi
-
-  set_config "katcoder_endpoint_id" "$endpoint"
-}
 
 config_kimi_settings() {
   # Configure model
@@ -667,7 +647,7 @@ cmd_config() {
     anthropic)
       config_anthropic
       ;;
-    zai|minimax|kimi|katcoder)
+    zai|minimax|kimi)
       config_standard_provider "$provider"
       ;;
     custom)
@@ -676,7 +656,7 @@ cmd_config() {
     *)
       error "Unknown provider: '$provider'"
       echo
-      echo "Available providers: anthropic, zai, minimax, kimi, katcoder, custom"
+      echo "Available providers: anthropic, zai, minimax, kimi, custom"
       echo "Example: clauver config zai"
       return 1
       ;;
@@ -687,7 +667,6 @@ cmd_config() {
 declare -A PROVIDER_CONFIGS=(
   ["zai"]="Z.AI|https://api.z.ai/api/anthropic|ZAI_API_KEY|glm-4.5-air|glm-4.6|glm-4.6"
   ["minimax"]="MiniMax|https://api.minimax.io/anthropic|MINIMAX_API_KEY|MiniMax-M2|MiniMax-M2|MiniMax-M2"
-  ["katcoder"]="KAT-Coder|https://api.kwaipilot.com/v1|KATCODER_API_KEY|claude-3-5-sonnet-20241022|claude-3-5-sonnet-20241022|claude-3-5-sonnet-20241022"
 )
 
 # Provider configuration metadata
@@ -695,7 +674,6 @@ declare -A PROVIDER_REQUIRES=(
   ["zai"]="api_key"
   ["minimax"]="api_key"
   ["kimi"]="api_key,model,url"
-  ["katcoder"]="api_key,endpoint_id"
 )
 
 # Generic provider switching function
@@ -725,9 +703,6 @@ switch_to_provider() {
     case "$field" in
       "api_key")
         local key_var="${provider^^}_API_KEY"
-        if [ "$provider" = "katcoder" ]; then
-          key_var="KATCODER_API_KEY"
-        fi
         local api_key
         api_key="$(get_secret "$key_var")"
         if [ -z "$api_key" ]; then
@@ -735,15 +710,7 @@ switch_to_provider() {
           exit 1
         fi
         ;;
-      "endpoint_id")
-        local endpoint_id
-        endpoint_id="$(get_config "${provider}_endpoint_id")"
-        if [ -z "$endpoint_id" ]; then
-          error "${provider^^} endpoint ID missing. Run: clauver config $provider"
-          exit 1
-        fi
-        ;;
-      "model")
+            "model")
         local model
         model="$(get_config "${provider}_model")"
         if [ "$provider" = "kimi" ]; then
@@ -794,22 +761,7 @@ switch_to_provider() {
       export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="240"
       export ANTHROPIC_SMALL_FAST_MAX_TOKENS="200000"
       ;;
-    "katcoder")
-      banner "Kwaipilot (KAT-Coder)"
-      export ANTHROPIC_BASE_URL="https://api.kwaipilot.com/v1/chat/completions"
-      export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_API_KEY="katcoder-$api_key"
-      export ANTHROPIC_MODEL="claude-3-5-sonnet-20241022"
-      export ANTHROPIC_SMALL_FAST_MODEL="claude-3-5-sonnet-20241022"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-3-5-sonnet-20241022"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-3-5-sonnet-20241022"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-3-5-sonnet-20241022"
-      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="600"
-      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="200000"
-      export ANTHROPIC_SMALL_FAST_MODEL_CUMULATIVE_TIMEOUT="2400"
-      export KATCODER_ENDPOINT_ID="$endpoint_id"
-      ;;
-  esac
+      esac
 
   exec claude "$@"
 }
@@ -837,12 +789,6 @@ validate_api_key() {
       # Most API keys are alphanumeric with some special chars
       if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
         warn "API key contains unusual characters for $provider"
-      fi
-      ;;
-    "katcoder")
-      # KAT-Coder keys might have different format
-      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        warn "API key contains unusual characters for KAT-Coder"
       fi
       ;;
   esac
@@ -890,7 +836,7 @@ validate_provider_name() {
   fi
 
   # Check if name is reserved
-  local reserved_names=("anthropic" "zai" "minimax" "kimi" "katcoder")
+  local reserved_names=("anthropic" "zai" "minimax" "kimi")
   for reserved in "${reserved_names[@]}"; do
     if [ "$provider" = "$reserved" ]; then
       error "Provider name '$provider' is reserved"
@@ -901,21 +847,6 @@ validate_provider_name() {
   return 0
 }
 
-validate_endpoint_id() {
-  local endpoint_id="$1"
-
-  if [ -z "$endpoint_id" ]; then
-    error "Endpoint ID cannot be empty"
-    return 1
-  fi
-
-  # KAT-Coder endpoint IDs typically follow pattern ep-xxx-xxx
-  if [[ ! "$endpoint_id" =~ ^ep-[a-zA-Z0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
-    warn "Endpoint ID format unusual (expected: ep-xxx-xxx)"
-  fi
-
-  return 0
-}
 
 validate_model_name() {
   local model="$1"
@@ -951,9 +882,6 @@ switch_to_kimi() {
   switch_to_provider "kimi" "$@"
 }
 
-switch_to_katcoder() {
-  switch_to_provider "katcoder" "$@"
-}
 
 switch_to_custom() {
   local provider_name="$1"
@@ -1002,7 +930,7 @@ cmd_test() {
         error "✗ Native Anthropic test failed"
       fi
       ;;
-    zai|minimax|kimi|katcoder)
+    zai|minimax|kimi)
       # Load secrets
       load_secrets
 
@@ -1035,17 +963,7 @@ cmd_test() {
           export ANTHROPIC_MODEL="$kimi_model"
           export API_TIMEOUT_MS="3000000"
           ;;
-        katcoder)
-          local endpoint_id
-          endpoint_id="$(get_config "katcoder_endpoint_id")"
-          if [ -z "$endpoint_id" ]; then
-            error "KAT-Coder endpoint ID missing. Run: clauver config katcoder"
-            return 1
-          fi
-          export ANTHROPIC_BASE_URL="https://vanchin.streamlake.ai/api/gateway/v1/endpoints/$endpoint_id/claude-code-proxy"
-          export API_TIMEOUT_MS="3000000"
-          ;;
-      esac
+              esac
       timeout 10 claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
       sleep 3
@@ -1106,7 +1024,7 @@ cmd_status() {
   fi
   echo
 
-  for provider in zai minimax kimi katcoder; do
+  for provider in zai minimax kimi; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -1208,19 +1126,7 @@ cmd_default() {
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
-    katcoder)
-      local katcoder_key
-      katcoder_key="$(get_secret "KATCODER_API_KEY")"
-      if [ -z "$katcoder_key" ]; then
-        error "KAT-Coder is not configured. Run: clauver config katcoder"
-        return 1
-      fi
-      set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
-      echo "Run 'clauver' without arguments to use this provider."
-      return 0
-      ;;
-    *)
+        *)
       # Check if it's a custom provider
       local custom_key
       custom_key="$(get_config "custom_${provider}_api_key")"
@@ -1312,11 +1218,10 @@ EOF
   echo "  2) Configure Z.AI (GLM models - requires API key)"
   echo "  3) Configure MiniMax (MiniMax-M2 - requires API key)"
   echo "  4) Configure Kimi (Moonshot AI - requires API key)"
-  echo "  5) Configure KAT-Coder (requires API key + Endpoint ID)"
-  echo "  6) Add a custom provider"
-  echo "  7) Skip (I'll configure later)"
+  echo "  5) Add a custom provider"
+  echo "  6) Skip (I'll configure later)"
   echo
-  read -r -p "Choose [1-7]: " choice
+  read -r -p "Choose [1-6]: " choice
 
   case "$choice" in
     1)
@@ -1345,15 +1250,10 @@ EOF
       ;;
     5)
       echo
-      echo "Let's configure KAT-Coder for you..."
-      cmd_config "katcoder"
-      ;;
-    6)
-      echo
       echo "Let's add your custom provider..."
       cmd_config "custom"
       ;;
-    7)
+    6)
       echo
       warn "Setup skipped."
       echo "Run ${BOLD}clauver setup${NC} anytime to configure a provider."
@@ -1430,11 +1330,7 @@ case "${1:-}" in
     shift
     switch_to_kimi "$@"
     ;;
-  katcoder)
-    shift
-    switch_to_katcoder "$@"
-    ;;
-  "")
+    "")
     # Check if a default provider is set
     default_provider="$(get_config "default_provider")"
     if [ -n "$default_provider" ]; then
@@ -1452,10 +1348,7 @@ case "${1:-}" in
         kimi)
           switch_to_kimi "$@"
           ;;
-        katcoder)
-          switch_to_katcoder "$@"
-          ;;
-        *)
+                *)
           # It's a custom provider
           switch_to_custom "$default_provider" "$@"
           ;;
@@ -1489,10 +1382,7 @@ case "${1:-}" in
           kimi)
             switch_to_kimi "$@"
             ;;
-          katcoder)
-            switch_to_katcoder "$@"
-            ;;
-          *)
+                    *)
             # It's a custom provider
             switch_to_custom "$default_provider" "$@"
             ;;

@@ -25,7 +25,6 @@ between different Claude Code API providers, including:
 - **Z.AI** - Zhipu AI's GLM models
 - **MiniMax** - MiniMax AI's MiniMax-M2 model
 - **Kimi** - Moonshot AI's Kimi K2 model
-- **KAT-Coder** - Kwaipilot's KAT-Coder
 - **Custom Providers** - Add your own provider
 
 > _**⚠️ Platform Compatibility**:
@@ -96,7 +95,6 @@ clauver setup        # Interactive setup wizard
 clauver config zai           # Configure Z.AI
 clauver config minimax       # Configure MiniMax
 clauver config kimi          # Configure Kimi
-clauver config katcoder      # Configure KAT-Coder
 clauver config anthropic     # Configure Native Anthropic
 clauver config custom        # Add custom provider
 ```
@@ -108,7 +106,6 @@ clauver anthropic    # Use Native Anthropic
 clauver zai          # Use Z.AI
 clauver minimax      # Use MiniMax
 clauver kimi         # Use Kimi
-clauver katcoder     # Use KAT-Coder
 clauver <custom>     # Use custom provider
 ```
 
@@ -340,8 +337,7 @@ _Clauver_ uses an encrypted configuration system:
   - `ZAI_API_KEY`
   - `MINIMAX_API_KEY`
   - `KIMI_API_KEY`
-  - `KATCODER_API_KEY`
-  - Secrets are only decrypted into memory, never written to disk as plaintext
+    - Secrets are only decrypted into memory, never written to disk as plaintext
 
 - **age.key**: Your encryption key (automatically generated)
   - **CRITICAL**: Back up this file! Without it, you cannot decrypt your secrets
