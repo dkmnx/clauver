@@ -58,7 +58,7 @@ EOF
     # Step 9: Check version
     local version_output
     version_output=$(cmd_version)
-    assert_contains "$version_output" "v1.6.1" "Version should be displayed"
+    assert_contains "$version_output" "v1.7.0" "Version should be displayed"
 
     cleanup_test_environment "full_workflow_test"
     end_test
@@ -190,7 +190,7 @@ EOF
 
     # Temporarily modify version to test update detection
     local original_version="$VERSION"
-    VERSION="1.6.1"
+    VERSION="1.7.0"
 
     # Test version check (simulate update available)
     local version_output
