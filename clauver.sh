@@ -4,18 +4,49 @@ IFS=$'\n\t'
 umask 077
 
 VERSION="1.6.1"
-BASE="${CLAUVER_HOME:-$HOME/.clauver}"
+
+# Test mode detection - skip global config when running tests
+if [[ "${CLAUVER_TEST_MODE:-}" == "1" ]]; then
+  # In test mode, use only the provided CLAUVER_HOME
+  BASE="${CLAUVER_HOME}"
+else
+  # Normal mode - allow fallback to home directory
+  BASE="${CLAUVER_HOME:-$HOME/.clauver}"
+fi
+
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
 SECRETS_AGE="$BASE/secrets.env.age"
 AGE_KEY="$BASE/age.key"
 SECRETS_LOADED=0
+CONFIG_CACHE_LOADED=0
+# shellcheck disable=SC2034
+declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 
-# Security: Initialize global variables defensively
-ZAI_API_KEY="${ZAI_API_KEY:-}"
-MINIMAX_API_KEY="${MINIMAX_API_KEY:-}"
-KIMI_API_KEY="${KIMI_API_KEY:-}"
-KATCODER_API_KEY="${KATCODER_API_KEY:-}"
+# Configuration constants - extracted from hardcoded values
+declare -A PROVIDER_DEFAULTS=(
+  ["zai_base_url"]="https://api.z.ai/api/anthropic"
+  ["zai_default_model"]="glm-4.6"
+  ["minimax_base_url"]="https://api.minimax.io/anthropic"
+  ["minimax_default_model"]="MiniMax-M2"
+  ["kimi_base_url"]="https://api.kimi.com/coding/"
+  ["kimi_default_model"]="kimi-for-coding"
+)
+
+# Timeout and token limits
+declare -A PERFORMANCE_DEFAULTS=(
+  ["network_connect_timeout"]="10"
+  ["network_max_time"]="30"
+  ["minimax_small_fast_timeout"]="120"
+  ["minimax_small_fast_max_tokens"]="24576"
+  ["kimi_small_fast_timeout"]="240"
+  ["kimi_small_fast_max_tokens"]="200000"
+  ["test_api_timeout_ms"]="3000000"
+)
+
+# GitHub API configuration
+GITHUB_API_BASE="https://api.github.com/repos/dkmnx/clauver"
+RAW_CONTENT_BASE="https://raw.githubusercontent.com/dkmnx/clauver"
 
 RED=$'\033[0;31m'
 GREEN=$'\033[0;32m'
@@ -28,6 +59,28 @@ log() { printf "${BLUE}→${NC} %s\n" "$*"; }
 success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
 warn() { printf "${YELLOW}!${NC} %s\n" "$*"; }
 error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
+
+# Progress indicator for long-running operations
+show_progress() {
+  local message="$1"
+  local pid="$2"
+  local delay="${3:-0.5}"
+  local spinner="${4:-⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏}"
+
+  printf "${BLUE}${spinner:0:1}${NC} %s..." "$message"
+
+  while kill -0 "$pid" 2>/dev/null; do
+    for ((i=1; i<${#spinner}; i++)); do
+      printf "\r${BLUE}${spinner:$i:1}${NC} %s..." "$message"
+      sleep "$delay"
+      if ! kill -0 "$pid" 2>/dev/null; then
+        break
+      fi
+    done
+  done
+
+  printf "\r${GREEN}✓${NC} %s completed\n" "$message"
+}
 
 banner() {
   provider="$1"
@@ -46,7 +99,8 @@ BANNER
 
 # Ensure age encryption key exists
 ensure_age_key() {
-  if [ ! -f "$AGE_KEY" ]; then
+  local current_age_key="${CLAUVER_HOME:-$HOME/.clauver}/age.key"
+  if [ ! -f "$current_age_key" ]; then
     if ! command -v age-keygen &>/dev/null; then
       error "age-keygen command not found. Please install 'age' package."
       echo
@@ -59,25 +113,18 @@ ensure_age_key() {
       return 1
     fi
     log "Generating age encryption key..."
-    age-keygen -o "$AGE_KEY"
-    chmod 600 "$AGE_KEY"
-    success "Age encryption key generated at $AGE_KEY"
+    age-keygen -o "$current_age_key"
+    chmod 600 "$current_age_key"
+    success "Age encryption key generated at $current_age_key"
     echo
     warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
   fi
 }
 
-[ -f "$CONFIG" ] || true
-[ -f "$SECRETS" ] || true
-
 # Save secrets to encrypted file
 save_secrets() {
-  local temp_file
-  temp_file="$(mktemp)"
-
   # Check if age command is available
   if ! command -v age &>/dev/null; then
-    rm -f "$temp_file"
     error "age command not found. Please install 'age' package."
     echo
     echo "Installation instructions:"
@@ -91,7 +138,6 @@ save_secrets() {
 
   # Check if key file exists
   if [ ! -f "$AGE_KEY" ]; then
-    rm -f "$temp_file"
     error "Age key not found at: $AGE_KEY"
     echo
     echo "Your encryption key is missing. To recover:"
@@ -101,17 +147,20 @@ save_secrets() {
     return 1
   fi
 
-  # Write all current API key environment variables to temp file
-  {
-    [ -n "${ZAI_API_KEY:-}" ] && echo "ZAI_API_KEY=$ZAI_API_KEY"
-    [ -n "${MINIMAX_API_KEY:-}" ] && echo "MINIMAX_API_KEY=$MINIMAX_API_KEY"
-    [ -n "${KIMI_API_KEY:-}" ] && echo "KIMI_API_KEY=$KIMI_API_KEY"
-    [ -n "${KATCODER_API_KEY:-}" ] && echo "KATCODER_API_KEY=$KATCODER_API_KEY"
-  } > "$temp_file"
+  # Create secrets data in memory and encrypt directly
+  local secrets_data=""
+  [ -n "${ZAI_API_KEY:-}" ] && secrets_data="${secrets_data}ZAI_API_KEY=${ZAI_API_KEY}"$'\n'
+  [ -n "${MINIMAX_API_KEY:-}" ] && secrets_data="${secrets_data}MINIMAX_API_KEY=${MINIMAX_API_KEY}"$'\n'
+  [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=${KIMI_API_KEY}"$'\n'
 
-  # Encrypt the temp file
-  if ! age -e -i "$AGE_KEY" < "$temp_file" > "$SECRETS_AGE" 2>/dev/null; then
-    rm -f "$temp_file"
+  # Encrypt directly from memory without temporary files
+  log "Encrypting secrets..."
+  printf '%s' "$secrets_data" | age -e -i "$AGE_KEY" > "$SECRETS_AGE" 2>/dev/null &
+  local encrypt_pid=$!
+  show_progress "Encrypting secrets file" "$encrypt_pid" 0.3
+  wait "$encrypt_pid"
+
+  if [ ! -s "$SECRETS_AGE" ]; then
     error "Failed to encrypt secrets file"
     echo "This might be due to:"
     echo "  • Corrupted age key file"
@@ -120,8 +169,7 @@ save_secrets() {
     return 1
   fi
 
-  # Clean up
-  rm -f "$temp_file"
+  # Clean up any existing plaintext file
   rm -f "$SECRETS"  # Remove plaintext file if it exists
   chmod 600 "$SECRETS_AGE"
 }
@@ -160,9 +208,19 @@ load_secrets() {
     fi
 
     # Test decryption first to catch corruption early
-    local decrypt_test
-    decrypt_test=$(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>&1)
+    local temp_decrypt
+    temp_decrypt=$(mktemp -t clauver_decrypt_XXXXXXXXXX)
+    age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
+    local decrypt_pid=$!
+    wait "$decrypt_pid"
+
     local decrypt_exit=$?
+    local decrypt_test=""
+
+    if [ -f "$temp_decrypt" ]; then
+      decrypt_test=$(cat "$temp_decrypt")
+      rm -f "$temp_decrypt"
+    fi
 
     if [ $decrypt_exit -ne 0 ]; then
       error "Failed to decrypt secrets file"
@@ -193,10 +251,69 @@ load_secrets() {
   SECRETS_LOADED=1
 }
 
-# Get config value from CONFIG file
+# Get config value from CONFIG file with caching
 get_config() {
   local key="$1"
-  grep "^${key}=" "$CONFIG" 2>/dev/null | cut -d= -f2- || echo ""
+
+  # Handle test mode where CONFIG_CACHE might not be properly declared
+  if [[ -z "${CONFIG_CACHE_LOADED:-}" ]] || [[ ! -v CONFIG_CACHE ]]; then
+    # Fallback to direct file read if cache is not available
+    if [ -f "$CONFIG" ]; then
+      local value
+      value=$(grep "^${key}=" "$CONFIG" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+      echo "${value:-}"
+    else
+      echo ""
+    fi
+    return
+  fi
+
+  # Ensure config is loaded into cache
+  load_config_cache
+
+  # For keys with special characters (like hyphens), use file read to avoid array issues
+  if [[ "$key" =~ [-] ]]; then
+    if [ -f "$CONFIG" ]; then
+      local value
+      value=$(grep "^${key}=" "$CONFIG" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+      echo "${value:-}"
+    else
+      echo ""
+    fi
+  else
+    # For normal keys, use the cache with safe variable access
+    if [[ -v CONFIG_CACHE["$key"] ]]; then
+      echo "${CONFIG_CACHE[$key]}"
+    else
+      echo ""
+    fi
+  fi
+}
+
+# Load config file into cache for performance
+load_config_cache() {
+  # Skip if already loaded in this session
+  [ "$CONFIG_CACHE_LOADED" -eq 1 ] && return 0
+
+  # Clear cache
+  # shellcheck disable=SC2034
+  unset CONFIG_CACHE
+  declare -A CONFIG_CACHE
+
+  # Load config file into cache if it exists
+  if [ -f "$CONFIG" ]; then
+    while IFS="=" read -r key value; do
+      # Skip empty lines, comments, and malformed lines
+      [[ -z "$key" || "$key" =~ ^[[:space:]]*# || -z "$value" ]] && continue
+      # Sanitize key format and ensure key is not empty
+      if [[ -n "$key" && "$key" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+        CONFIG_CACHE["$key"]="$value"
+      fi
+    done < "$CONFIG" 2>/dev/null || true
+  fi
+
+  # Mark cache as loaded
+  CONFIG_CACHE_LOADED=1
 }
 
 # Get secret value from environment
@@ -221,6 +338,9 @@ set_config() {
     return 1
   fi
 
+  # Ensure config directory exists
+  mkdir -p "$(dirname "$CONFIG")"
+
   local tmp
   tmp="$(mktemp "${CONFIG}.XXXXXX")"
   if [ -f "$CONFIG" ]; then
@@ -232,6 +352,11 @@ set_config() {
   printf '%s=%s\n' "$key" "$value" >> "$tmp"
   mv "$tmp" "$CONFIG"
   chmod 600 "$CONFIG"
+
+  # Invalidate cache to force reload on next access
+  CONFIG_CACHE_LOADED=0
+  # shellcheck disable=SC2034
+  CONFIG_CACHE=()
 }
 
 set_secret() {
@@ -303,8 +428,31 @@ get_latest_version() {
     return 1
   fi
 
-  local latest_version
-  latest_version=$(curl -s "https://api.github.com/repos/dkmnx/clauver/tags" 2>/dev/null | python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null)
+  # Only show log message if not being captured (when stdout is a terminal)
+  if [ -t 1 ]; then
+    log "Checking for updates..."
+  fi
+  local latest_version=""
+  # Run curl in background with timeout for progress indicator
+  local temp_output
+  temp_output=$(mktemp -t clauver_version_XXXXXXXXXX)
+  curl -s --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
+    --max-time "${PERFORMANCE_DEFAULTS[network_max_time]}" \
+    "$GITHUB_API_BASE/tags" 2>/dev/null | \
+  python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null > "$temp_output" 2>&1 &
+  local curl_pid=$!
+
+  # Show progress for the network request
+  if [ -t 1 ]; then
+    show_progress "Checking GitHub API" "$curl_pid" 0.3
+  fi
+  wait "$curl_pid"
+
+  if [ -f "$temp_output" ]; then
+    latest_version=$(cat "$temp_output")
+    rm -f "$temp_output"
+  fi
+
   if [ -z "$latest_version" ]; then
     error "Failed to fetch latest version from GitHub"
     return 1
@@ -314,15 +462,17 @@ get_latest_version() {
 
 cmd_version() {
   local latest_version
-  echo "Current version: v${VERSION}"
+  printf "Current version: v%s\n" "$VERSION"
 
-  latest_version=$(get_latest_version 2>/dev/null)
+  latest_version=$(get_latest_version 2>/dev/null | tail -n1)
   if [ -n "$latest_version" ]; then
     if [ "$VERSION" = "$latest_version" ]; then
       success "You are on the latest version"
-    else
+    elif [ "$VERSION" = "$(printf '%s\n' "$VERSION" "$latest_version" | sort -V | head -n1)" ] && [ "$VERSION" != "$latest_version" ]; then
       warn "Update available: v${latest_version}"
       echo "Run 'clauver update' to upgrade"
+    else
+      echo "! You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
     fi
   else
     warn "Could not check for updates"
@@ -346,9 +496,26 @@ cmd_update() {
 
   latest_version=$(get_latest_version) || return 1
 
+  # Validate that we got a proper version string
+  if [ -z "$latest_version" ]; then
+    error "Failed to determine latest version"
+    return 1
+  fi
+
   if [ "$VERSION" = "$latest_version" ]; then
     success "Already on latest version (v${VERSION})"
     return 0
+  fi
+
+  # Prevent accidental rollback from pre-release to older stable version
+  if [ "$VERSION" != "$(printf '%s\n' "$VERSION" "$latest_version" | sort -V | head -n1)" ]; then
+    warn "You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
+    echo
+    read -r -p "Rollback to v${latest_version}? This will downgrade your version. [y/N]: " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      echo "Update cancelled."
+      return 0
+    fi
   fi
 
   echo "Updating from v${VERSION} to v${latest_version}..."
@@ -358,15 +525,30 @@ cmd_update() {
   temp_checksum=$(mktemp)
 
   # Security: Download both script and checksum file
-  log "Downloading update..."
-  if ! curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null; then
+  log "Starting download process..."
+
+  # Download main script with progress indicator
+  curl -fsSL --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
+    --max-time 60 "$RAW_CONTENT_BASE/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null &
+  local download_pid=$!
+  show_progress "Downloading clauver.sh v${latest_version}" "$download_pid" 0.2
+  wait "$download_pid"
+
+  if [ ! -s "$temp_file" ]; then
     rm -f "$temp_file" "$temp_checksum"
     error "Failed to download update"
     return 1
   fi
 
-  log "Downloading checksum..."
-  if ! curl -fsSL "https://raw.githubusercontent.com/dkmnx/clauver/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null; then
+  # Download checksum file with progress indicator
+  curl -fsSL --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
+    --max-time "${PERFORMANCE_DEFAULTS[network_max_time]}" \
+    "$RAW_CONTENT_BASE/v${latest_version}/clauver.sh.sha256" -o "$temp_checksum" 2>/dev/null &
+  local checksum_pid=$!
+  show_progress "Downloading integrity checksum" "$checksum_pid" 0.2
+  wait "$checksum_pid"
+
+  if [ ! -s "$temp_checksum" ]; then
     warn "SHA256 checksum file not available for v${latest_version}"
     warn "Proceeding without integrity verification (not recommended)"
     echo
@@ -431,7 +613,6 @@ show_help() {
   echo "  zai                     Switch to Z.AI provider"
   echo "  minimax                 Switch to MiniMax provider"
   echo "  kimi                    Switch to Moonshot Kimi provider"
-  echo "  katcoder                Switch to KAT-Coder provider"
   echo "  <custom>                Switch to your custom provider"
   echo
   echo "Examples:"
@@ -478,7 +659,7 @@ cmd_list() {
   echo "  Description: Use your Claude Pro/Team subscription"
   echo
 
-  for provider in zai minimax kimi katcoder; do
+  for provider in zai minimax kimi; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -490,12 +671,12 @@ cmd_list() {
       if [ "$provider" == "kimi" ]; then
         local kimi_model
         kimi_model="$(get_config "kimi_model")"
-        kimi_model="${kimi_model:-kimi-for-coding}"
+        kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
         echo "  Model: $kimi_model"
 
         local kimi_base_url
         kimi_base_url="$(get_config "kimi_base_url")"
-        kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+        kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
         echo "  Base URL: $kimi_base_url"
       fi
       echo
@@ -520,7 +701,7 @@ cmd_list() {
   fi
 
   echo -e "${YELLOW}Not Configured:${NC}"
-  for provider in zai minimax kimi katcoder; do
+  for provider in zai minimax kimi; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -530,103 +711,390 @@ cmd_list() {
   done
 }
 
+# Helper functions for configuration
+config_show_usage() {
+  error "Usage: clauver config <provider>"
+  echo
+  echo "Available providers: anthropic, zai, minimax, kimi, custom"
+  echo "Example: clauver config zai"
+}
+
+config_anthropic() {
+  echo
+  success "Native Anthropic is ready to use!"
+  echo "No configuration needed. Simply run: clauver anthropic"
+}
+
+config_standard_provider() {
+  local provider="$1"
+  echo
+  echo -e "${BOLD}${provider^^} Configuration${NC}"
+
+  local key_name="${provider^^}_API_KEY"
+  local current_key
+  current_key="$(get_secret "$key_name")"
+  [ -n "$current_key" ] && echo "Current key: $(mask_key "$current_key")"
+
+  read -rs -p "API Key: " key; echo
+  [ -z "$key" ] && { error "Key is required"; return 1; }
+
+  # Validate API key
+  if ! validate_api_key "$key" "$provider"; then
+    return 1
+  fi
+
+  set_secret "$key_name" "$key"
+
+  # Provider-specific configuration
+  case "$provider" in
+    "kimi")
+      config_kimi_settings
+      ;;
+  esac
+
+  success "${provider^^} configured. Use: clauver $provider"
+
+  # Show encryption status
+  if [ -f "$SECRETS_AGE" ]; then
+    echo -e "${GREEN}🔒 Secrets encrypted at: $SECRETS_AGE${NC}"
+  fi
+}
+
+
+config_kimi_settings() {
+  # Configure model
+  local current_model
+  current_model="$(get_config "kimi_model")"
+  [ -n "$current_model" ] && echo "Current model: $current_model"
+  read -r -p "Model (default: ${PROVIDER_DEFAULTS[kimi_default_model]}): " model
+  model="${model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
+
+  # Validate model name
+  if [ -n "$model" ] && ! validate_model_name "$model"; then
+    return 1
+  fi
+
+  [ -n "$model" ] && set_config "kimi_model" "$model"
+
+  # Configure URL
+  local current_url
+  current_url="$(get_config "kimi_base_url")"
+  [ -n "$current_url" ] && echo "Current base URL: $current_url"
+  read -r -p "Base URL (default: ${PROVIDER_DEFAULTS[kimi_base_url]}): " url
+  url="${url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
+
+  # Validate URL
+  if [ -n "$url" ] && ! validate_url "$url"; then
+    return 1
+  fi
+
+  [ -n "$url" ] && set_config "kimi_base_url" "$url"
+}
+
+config_custom_provider() {
+  echo
+  echo -e "${BOLD}Custom Provider Configuration${NC}"
+  read -r -p "Provider name (e.g., 'my-provider'): " name
+
+  # Validate provider name using the validation function
+  if ! validate_provider_name "$name"; then
+    return 1
+  fi
+
+  read -r -p "Base URL: " base_url
+  read -rs -p "API Key: " api_key; echo
+  read -r -p "Default model (optional): " model
+
+  { [ -z "$name" ] || [ -z "$base_url" ] || [ -z "$api_key" ]; } && { error "Name, Base URL and API Key are required"; return 1; }
+
+  # Validate inputs
+  if ! validate_url "$base_url"; then
+    return 1
+  fi
+
+  if ! validate_api_key "$api_key" "custom"; then
+    return 1
+  fi
+
+  if [ -n "$model" ] && ! validate_model_name "$model"; then
+    return 1
+  fi
+
+  set_config "custom_${name}_api_key" "$api_key"
+  set_config "custom_${name}_base_url" "$base_url"
+  [ -n "$model" ] && set_config "custom_${name}_model" "$model"
+
+  success "Custom provider '$name' configured. Use: clauver $name"
+}
+
 cmd_config() {
   local provider="${1:-}"
 
   if [ -z "$provider" ]; then
-    error "Usage: clauver config <provider>"
-    echo
-    echo "Available providers: anthropic, zai, minimax, kimi, katcoder, custom"
-    echo "Example: clauver config zai"
+    config_show_usage
     return 1
   fi
 
   case "$provider" in
     anthropic)
-      echo
-      success "Native Anthropic is ready to use!"
-      echo "No configuration needed. Simply run: clauver anthropic"
+      config_anthropic
       ;;
-    zai|minimax|kimi|katcoder)
-      echo
-      echo -e "${BOLD}${provider^^} Configuration${NC}"
-      local key_name="${provider^^}_API_KEY"
-      local current_key
-      current_key="$(get_secret "$key_name")"
-      [ -n "$current_key" ] && echo "Current key: $(mask_key "$current_key")"
-      read -rs -p "API Key: " key; echo
-      [ -z "$key" ] && { error "Key is required"; return 1; }
-      set_secret "$key_name" "$key"
-
-      # Save endpoint ID for KAT-Coder
-      if [ "$provider" == "katcoder" ]; then
-        local endpoint_id
-        endpoint_id="$(get_config "katcoder_endpoint_id")"
-        [ -n "$endpoint_id" ] && echo "Current endpoint: $endpoint_id"
-        read -r -p "Endpoint ID (e.g., ep-xxx-xxx): " endpoint
-        [ -z "$endpoint" ] && { error "Endpoint ID is required"; return 1; }
-        set_config "katcoder_endpoint_id" "$endpoint"
-      fi
-
-      # Save model and URL for Kimi
-      if [ "$provider" == "kimi" ]; then
-        local current_model
-        current_model="$(get_config "kimi_model")"
-        [ -n "$current_model" ] && echo "Current model: $current_model"
-        read -r -p "Model (default: kimi-for-coding): " model
-        model="${model:-kimi-for-coding}"
-        [ -n "$model" ] && set_config "kimi_model" "$model"
-
-        local current_url
-        current_url="$(get_config "kimi_base_url")"
-        [ -n "$current_url" ] && echo "Current base URL: $current_url"
-        read -r -p "Base URL (default: https://api.kimi.com/coding/): " url
-        url="${url:-https://api.kimi.com/coding/}"
-        [ -n "$url" ] && set_config "kimi_base_url" "$url"
-      fi
-
-      success "${provider^^} configured. Use: clauver $provider"
-
-      # Show encryption status
-      if [ -f "$SECRETS_AGE" ]; then
-        echo -e "${GREEN}🔒 Secrets encrypted at: $SECRETS_AGE${NC}"
-      fi
+    zai|minimax|kimi)
+      config_standard_provider "$provider"
       ;;
     custom)
-      echo
-      echo -e "${BOLD}Custom Provider Configuration${NC}"
-      read -r -p "Provider name (e.g., 'my-provider'): " name
-
-      if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-        error "Invalid name. Use letters, numbers, underscore and hyphen only."
-        return 1
-      fi
-
-      if [[ "$name" == "anthropic" || "$name" == "zai" || "$name" == "minimax" || "$name" == "kimi" || "$name" == "katcoder" ]]; then
-        error "Provider name '$name' is reserved."
-        return 1
-      fi
-
-      read -r -p "Base URL: " base_url
-      read -rs -p "API Key: " api_key; echo
-      read -r -p "Default model (optional): " model
-
-      { [ -z "$name" ] || [ -z "$base_url" ] || [ -z "$api_key" ]; } && { error "Name, Base URL and API Key are required"; return 1; }
-
-      set_config "custom_${name}_api_key" "$api_key"
-      set_config "custom_${name}_base_url" "$base_url"
-      [ -n "$model" ] && set_config "custom_${name}_model" "$model"
-
-      success "Custom provider '$name' configured. Use: clauver $name"
+      config_custom_provider
       ;;
     *)
       error "Unknown provider: '$provider'"
       echo
-      echo "Available providers: anthropic, zai, minimax, kimi, katcoder, custom"
+      echo "Available providers: anthropic, zai, minimax, kimi, custom"
       echo "Example: clauver config zai"
       return 1
       ;;
   esac
+}
+
+# Provider abstraction layer
+declare -A PROVIDER_CONFIGS=(
+  ["zai"]="Z.AI|https://api.z.ai/api/anthropic|ZAI_API_KEY|glm-4.5-air|glm-4.6|glm-4.6"
+  ["minimax"]="MiniMax|https://api.minimax.io/anthropic|MINIMAX_API_KEY|MiniMax-M2|MiniMax-M2|MiniMax-M2"
+)
+
+# Provider configuration metadata
+declare -A PROVIDER_REQUIRES=(
+  ["zai"]="api_key"
+  ["minimax"]="api_key"
+  ["kimi"]="api_key,model,url"
+)
+
+# Generic provider switching function
+switch_to_provider() {
+  local provider="$1"
+  shift
+
+  # Handle anthropic specially (no API key needed)
+  if [ "$provider" = "anthropic" ]; then
+    switch_to_anthropic "$@"
+    return
+  fi
+
+  # Check if provider is supported
+  if ! [[ -v "PROVIDER_CONFIGS[$provider]" ]] && [ "$provider" != "kimi" ]; then
+    error "Provider '$provider' not supported"
+    exit 1
+  fi
+
+  load_secrets
+
+  # Validate required configuration
+  local requirements="${PROVIDER_REQUIRES[$provider]:-api_key}"
+  IFS=',' read -ra required_fields <<< "$requirements"
+
+  for field in "${required_fields[@]}"; do
+    case "$field" in
+      "api_key")
+        local key_var="${provider^^}_API_KEY"
+        local api_key
+        api_key="$(get_secret "$key_var")"
+        if [ -z "$api_key" ]; then
+          error "${provider^^} not configured. Run: clauver config $provider"
+          exit 1
+        fi
+        ;;
+            "model")
+        local model
+        model="$(get_config "${provider}_model")"
+        if [ "$provider" = "kimi" ]; then
+          model="${model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
+        fi
+        ;;
+      "url")
+        local url
+        url="$(get_config "${provider}_base_url")"
+        if [ "$provider" = "kimi" ]; then
+          url="${url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
+        fi
+        ;;
+    esac
+  done
+
+  # Set provider-specific environment
+  case "$provider" in
+    "zai")
+      banner "Zhipu AI (GLM Models)"
+      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[zai_default_model]}"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[zai_default_model]}"
+      ;;
+    "minimax")
+      banner "MiniMax (MiniMax-M2)"
+      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_SMALL_FAST_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[minimax_small_fast_timeout]}"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[minimax_small_fast_max_tokens]}"
+      ;;
+    "kimi")
+      banner "Moonshot AI (Kimi)"
+      export ANTHROPIC_BASE_URL="$url"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_MODEL="$model"
+      export ANTHROPIC_SMALL_FAST_MODEL="$model"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[kimi_small_fast_timeout]}"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[kimi_small_fast_max_tokens]}"
+      ;;
+      esac
+
+  exec claude "$@"
+}
+
+# Input validation framework
+validate_api_key() {
+  local key="$1"
+  local provider="$2"
+
+  # Basic validation - non-empty and reasonable length
+  if [ -z "$key" ]; then
+    error "API key cannot be empty"
+    return 1
+  fi
+
+  # Check minimum length (most API keys are at least 20 chars)
+  if [ ${#key} -lt 10 ]; then
+    error "API key too short (minimum 10 characters)"
+    return 1
+  fi
+
+  # Security validation - prevent injection attacks
+  # Reject dangerous characters that could be used for command injection
+  local dangerous_chars='[;`$|&<>]'
+  if [[ "$key" =~ [$dangerous_chars] ]]; then
+    error "API key contains dangerous characters that could be used for injection attacks"
+    return 1
+  fi
+
+  # Reject potential command substitution patterns
+  if [[ "$key" =~ \$\(.*\) ]]; then
+    error "API key contains potential command substitution pattern"
+    return 1
+  fi
+
+  # Reject quote characters that could break parsing
+  if [[ "$key" =~ [\'\"] ]]; then
+    error "API key contains quote characters that could break parsing"
+    return 1
+  fi
+
+  # Provider-specific validation
+  case "$provider" in
+    "zai"|"minimax"|"kimi")
+      # Most API keys are alphanumeric with some special chars
+      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        error "API key contains invalid characters for $provider (only alphanumeric, dot, underscore, hyphen allowed)"
+        return 1
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+validate_url() {
+  local url="$1"
+
+  # Basic URL validation
+  if [ -z "$url" ]; then
+    error "URL cannot be empty"
+    return 1
+  fi
+
+  # Check URL format
+  if [[ ! "$url" =~ ^https?:// ]]; then
+    error "URL must start with http:// or https://"
+    return 1
+  fi
+
+  # Check for valid hostname
+  if [[ ! "$url" =~ ^https?://[a-zA-Z0-9.-]+ ]]; then
+    error "Invalid URL format"
+    return 1
+  fi
+
+  return 0
+}
+
+validate_provider_name() {
+  local provider="$1"
+
+  # Check if provider name is valid
+  if [ -z "$provider" ]; then
+    error "Provider name cannot be empty"
+    return 1
+  fi
+
+  # Check for valid characters (alphanumeric, underscore, hyphen)
+  if [[ ! "$provider" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    error "Provider name can only contain letters, numbers, underscores, and hyphens"
+    return 1
+  fi
+
+  # Check if name is reserved
+  local reserved_names=("anthropic" "zai" "minimax" "kimi")
+  for reserved in "${reserved_names[@]}"; do
+    if [ "$provider" = "$reserved" ]; then
+      error "Provider name '$provider' is reserved"
+      return 1
+    fi
+  done
+
+  return 0
+}
+
+validate_model_name() {
+  local model="$1"
+
+  if [ -z "$model" ]; then
+    error "Model name cannot be empty"
+    return 1
+  fi
+
+  # Security validation - prevent injection attacks
+  # Reject dangerous characters that could be used for command injection
+  local dangerous_chars='[;`$|&<>]'
+  if [[ "$model" =~ [$dangerous_chars] ]]; then
+    error "Model name contains dangerous characters that could be used for injection attacks"
+    return 1
+  fi
+
+  # Reject potential command substitution patterns
+  if [[ "$model" =~ \$\(.*\) ]]; then
+    error "Model name contains potential command substitution pattern"
+    return 1
+  fi
+
+  # Reject quote characters that could break parsing
+  if [[ "$model" =~ [\'\"] ]]; then
+    error "Model name contains quote characters that could break parsing"
+    return 1
+  fi
+
+  # Basic model name validation - only allow safe characters
+  if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
+    return 1
+  fi
+
+  return 0
 }
 
 switch_to_anthropic() {
@@ -636,104 +1104,15 @@ switch_to_anthropic() {
 }
 
 switch_to_zai() {
-  load_secrets
-  local zai_key
-  zai_key="$(get_secret "ZAI_API_KEY")"
-  if [ -z "$zai_key" ]; then
-    error "Z.AI not configured. Run: clauver config zai"
-    exit 1
-  fi
-
-  banner "Zhipu AI (GLM Models)"
-
-  export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
-  export ANTHROPIC_AUTH_TOKEN="$zai_key"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4.6"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.6"
-
-  exec claude "$@"
+  switch_to_provider "zai" "$@"
 }
 
 switch_to_minimax() {
-  load_secrets
-  local minimax_key
-  minimax_key="$(get_secret "MINIMAX_API_KEY")"
-  if [ -z "$minimax_key" ]; then
-    error "MiniMax not configured. Run: clauver config minimax"
-    exit 1
-  fi
-
-  banner "MiniMax (MiniMax-M2)"
-
-  export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
-  export ANTHROPIC_AUTH_TOKEN="$minimax_key"
-  export ANTHROPIC_MODEL="MiniMax-M2"
-  export ANTHROPIC_SMALL_FAST_MODEL="MiniMax-M2"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="MiniMax-M2"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="MiniMax-M2"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="MiniMax-M2"
-  export API_TIMEOUT_MS="3000000"
-  export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
-
-  exec claude "$@"
+  switch_to_provider "minimax" "$@"
 }
 
 switch_to_kimi() {
-  load_secrets
-  local kimi_key
-  kimi_key="$(get_secret "KIMI_API_KEY")"
-  if [ -z "$kimi_key" ]; then
-    error "Kimi not configured. Run: clauver config kimi"
-    exit 1
-  fi
-
-  # Get configured model or use default
-  local kimi_model
-  kimi_model="$(get_config "kimi_model")"
-  kimi_model="${kimi_model:-kimi-for-coding}"
-
-  # Get configured URL or use default
-  local kimi_base_url
-  kimi_base_url="$(get_config "kimi_base_url")"
-  kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
-
-  banner "Moonshot AI (${kimi_model})"
-
-  export ANTHROPIC_BASE_URL="$kimi_base_url"
-  export ANTHROPIC_AUTH_TOKEN="$kimi_key"
-  export ANTHROPIC_MODEL="$kimi_model"
-  export ANTHROPIC_SMALL_FAST_MODEL="$kimi_model"
-  export API_TIMEOUT_MS="3000000"
-
-  exec claude "$@"
-}
-
-switch_to_katcoder() {
-  load_secrets
-  local vc_key
-  vc_key="$(get_secret "KATCODER_API_KEY")"
-  local endpoint_id
-  endpoint_id="$(get_config "katcoder_endpoint_id")"
-
-  if [ -z "$vc_key" ]; then
-    error "KAT-Coder not configured. Run: clauver config katcoder"
-    exit 1
-  fi
-  if [ -z "$endpoint_id" ]; then
-    error "KAT-Coder endpoint ID missing. Run: clauver config katcoder"
-    exit 1
-  fi
-
-  banner "Kwaipilot (KAT-Coder)"
-
-  export ANTHROPIC_BASE_URL="https://vanchin.streamlake.ai/api/gateway/v1/endpoints/$endpoint_id/claude-code-proxy"
-  export ANTHROPIC_AUTH_TOKEN="$vc_key"
-  export ANTHROPIC_MODEL="KAT-Coder"
-  export ANTHROPIC_SMALL_FAST_MODEL="KAT-Coder"
-  export API_TIMEOUT_MS="3000000"
-
-  exec claude "$@"
+  switch_to_provider "kimi" "$@"
 }
 
 switch_to_custom() {
@@ -780,10 +1159,10 @@ cmd_test() {
       if timeout 5 claude --version &>/dev/null; then
         success "Native Anthropic is working"
       else
-        error "✗ Native Anthropic test failed"
+        error "Native Anthropic test failed"
       fi
       ;;
-    zai|minimax|kimi|katcoder)
+    zai|minimax|kimi)
       # Load secrets
       load_secrets
 
@@ -799,34 +1178,24 @@ cmd_test() {
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       case "$provider" in
         zai)
-          export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
           ;;
         minimax)
-          export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
-          export API_TIMEOUT_MS="3000000"
+          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
+          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
           ;;
         kimi)
           local kimi_base_url
           kimi_base_url="$(get_config "kimi_base_url")"
-          kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+          kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
           export ANTHROPIC_BASE_URL="$kimi_base_url"
           local kimi_model
           kimi_model="$(get_config "kimi_model")"
-          kimi_model="${kimi_model:-kimi-for-coding}"
+          kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
           export ANTHROPIC_MODEL="$kimi_model"
-          export API_TIMEOUT_MS="3000000"
+          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
           ;;
-        katcoder)
-          local endpoint_id
-          endpoint_id="$(get_config "katcoder_endpoint_id")"
-          if [ -z "$endpoint_id" ]; then
-            error "KAT-Coder endpoint ID missing. Run: clauver config katcoder"
-            return 1
-          fi
-          export ANTHROPIC_BASE_URL="https://vanchin.streamlake.ai/api/gateway/v1/endpoints/$endpoint_id/claude-code-proxy"
-          export API_TIMEOUT_MS="3000000"
-          ;;
-      esac
+              esac
       timeout 10 claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
       sleep 3
@@ -834,7 +1203,7 @@ cmd_test() {
         success "${provider^^} configuration is valid"
         kill $test_pid 2>/dev/null || true
       else
-        error "✗ ${provider^^} test failed"
+        error "${provider^^} test failed"
       fi
       ;;
     *)
@@ -856,7 +1225,7 @@ cmd_test() {
         success "$provider configuration is valid"
         kill $test_pid 2>/dev/null || true
       else
-        error "✗ $provider test failed"
+        error "$provider test failed"
       fi
       ;;
   esac
@@ -883,11 +1252,11 @@ cmd_status() {
   if command -v claude &>/dev/null; then
     success "Installed"
   else
-    error "✗ Not installed"
+    error "Not installed"
   fi
   echo
 
-  for provider in zai minimax kimi katcoder; do
+  for provider in zai minimax kimi; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -898,15 +1267,15 @@ cmd_status() {
       if [ "$provider" == "kimi" ]; then
         local kimi_model
         kimi_model="$(get_config "kimi_model")"
-        kimi_model="${kimi_model:-kimi-for-coding}"
+        kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
         local kimi_base_url
         kimi_base_url="$(get_config "kimi_base_url")"
-        kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
+        kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
         echo "  Model: $kimi_model"
         echo "  URL: $kimi_base_url"
       fi
     else
-      warn "○ Not configured"
+      warn "Not configured"
     fi
     echo
   done
@@ -989,19 +1358,7 @@ cmd_default() {
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
-    katcoder)
-      local katcoder_key
-      katcoder_key="$(get_secret "KATCODER_API_KEY")"
-      if [ -z "$katcoder_key" ]; then
-        error "KAT-Coder is not configured. Run: clauver config katcoder"
-        return 1
-      fi
-      set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
-      echo "Run 'clauver' without arguments to use this provider."
-      return 0
-      ;;
-    *)
+        *)
       # Check if it's a custom provider
       local custom_key
       custom_key="$(get_config "custom_${provider}_api_key")"
@@ -1093,11 +1450,10 @@ EOF
   echo "  2) Configure Z.AI (GLM models - requires API key)"
   echo "  3) Configure MiniMax (MiniMax-M2 - requires API key)"
   echo "  4) Configure Kimi (Moonshot AI - requires API key)"
-  echo "  5) Configure KAT-Coder (requires API key + Endpoint ID)"
-  echo "  6) Add a custom provider"
-  echo "  7) Skip (I'll configure later)"
+  echo "  5) Add a custom provider"
+  echo "  6) Skip (I'll configure later)"
   echo
-  read -r -p "Choose [1-7]: " choice
+  read -r -p "Choose [1-6]: " choice
 
   case "$choice" in
     1)
@@ -1126,15 +1482,10 @@ EOF
       ;;
     5)
       echo
-      echo "Let's configure KAT-Coder for you..."
-      cmd_config "katcoder"
-      ;;
-    6)
-      echo
       echo "Let's add your custom provider..."
       cmd_config "custom"
       ;;
-    7)
+    6)
       echo
       warn "Setup skipped."
       echo "Run ${BOLD}clauver setup${NC} anytime to configure a provider."
@@ -1161,6 +1512,8 @@ EOF
   echo "  claude \"your prompt\" # Use current provider"
 }
 
+# Only execute main logic if this script is being run directly, not sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 case "${1:-}" in
   help|-h|--help)
     show_help
@@ -1211,11 +1564,7 @@ case "${1:-}" in
     shift
     switch_to_kimi "$@"
     ;;
-  katcoder)
-    shift
-    switch_to_katcoder "$@"
-    ;;
-  "")
+    "")
     # Check if a default provider is set
     default_provider="$(get_config "default_provider")"
     if [ -n "$default_provider" ]; then
@@ -1233,10 +1582,7 @@ case "${1:-}" in
         kimi)
           switch_to_kimi "$@"
           ;;
-        katcoder)
-          switch_to_katcoder "$@"
-          ;;
-        *)
+                *)
           # It's a custom provider
           switch_to_custom "$default_provider" "$@"
           ;;
@@ -1270,10 +1616,7 @@ case "${1:-}" in
           kimi)
             switch_to_kimi "$@"
             ;;
-          katcoder)
-            switch_to_katcoder "$@"
-            ;;
-          *)
+                    *)
             # It's a custom provider
             switch_to_custom "$default_provider" "$@"
             ;;
@@ -1286,3 +1629,4 @@ case "${1:-}" in
     fi
     ;;
 esac
+fi

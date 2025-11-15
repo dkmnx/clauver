@@ -256,7 +256,6 @@ echo " 2. Configure a provider:"
 echo -e "   ${GREEN}clauver config zai${NC}"
 echo -e "   ${GREEN}clauver config minimax${NC}"
 echo -e "   ${GREEN}clauver config kimi${NC}"
-echo -e "   ${GREEN}clauver config katcoder${NC}"
 echo -e "   ${GREEN}clauver config anthropic${NC}"
 echo
 echo " 3. Set a default provider (optional):"
