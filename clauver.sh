@@ -522,94 +522,156 @@ cmd_list() {
   done
 }
 
+# Helper functions for configuration
+config_show_usage() {
+  error "Usage: clauver config <provider>"
+  echo
+  echo "Available providers: anthropic, zai, minimax, kimi, katcoder, custom"
+  echo "Example: clauver config zai"
+}
+
+config_anthropic() {
+  echo
+  success "Native Anthropic is ready to use!"
+  echo "No configuration needed. Simply run: clauver anthropic"
+}
+
+config_standard_provider() {
+  local provider="$1"
+  echo
+  echo -e "${BOLD}${provider^^} Configuration${NC}"
+
+  local key_name="${provider^^}_API_KEY"
+  local current_key
+  current_key="$(get_secret "$key_name")"
+  [ -n "$current_key" ] && echo "Current key: $(mask_key "$current_key")"
+
+  read -rs -p "API Key: " key; echo
+  [ -z "$key" ] && { error "Key is required"; return 1; }
+
+  # Validate API key
+  if ! validate_api_key "$key" "$provider"; then
+    return 1
+  fi
+
+  set_secret "$key_name" "$key"
+
+  # Provider-specific configuration
+  case "$provider" in
+    "katcoder")
+      config_katcoder_endpoint
+      ;;
+    "kimi")
+      config_kimi_settings
+      ;;
+  esac
+
+  success "${provider^^} configured. Use: clauver $provider"
+
+  # Show encryption status
+  if [ -f "$SECRETS_AGE" ]; then
+    echo -e "${GREEN}🔒 Secrets encrypted at: $SECRETS_AGE${NC}"
+  fi
+}
+
+config_katcoder_endpoint() {
+  local endpoint_id
+  endpoint_id="$(get_config "katcoder_endpoint_id")"
+  [ -n "$endpoint_id" ] && echo "Current endpoint: $endpoint_id"
+  read -r -p "Endpoint ID (e.g., ep-xxx-xxx): " endpoint
+  [ -z "$endpoint" ] && { error "Endpoint ID is required"; return 1; }
+
+  # Validate endpoint ID
+  if ! validate_endpoint_id "$endpoint"; then
+    return 1
+  fi
+
+  set_config "katcoder_endpoint_id" "$endpoint"
+}
+
+config_kimi_settings() {
+  # Configure model
+  local current_model
+  current_model="$(get_config "kimi_model")"
+  [ -n "$current_model" ] && echo "Current model: $current_model"
+  read -r -p "Model (default: kimi-for-coding): " model
+  model="${model:-kimi-for-coding}"
+
+  # Validate model name
+  if [ -n "$model" ] && ! validate_model_name "$model"; then
+    return 1
+  fi
+
+  [ -n "$model" ] && set_config "kimi_model" "$model"
+
+  # Configure URL
+  local current_url
+  current_url="$(get_config "kimi_base_url")"
+  [ -n "$current_url" ] && echo "Current base URL: $current_url"
+  read -r -p "Base URL (default: https://api.kimi.com/coding/): " url
+  url="${url:-https://api.kimi.com/coding/}"
+
+  # Validate URL
+  if [ -n "$url" ] && ! validate_url "$url"; then
+    return 1
+  fi
+
+  [ -n "$url" ] && set_config "kimi_base_url" "$url"
+}
+
+config_custom_provider() {
+  echo
+  echo -e "${BOLD}Custom Provider Configuration${NC}"
+  read -r -p "Provider name (e.g., 'my-provider'): " name
+
+  # Validate provider name using the validation function
+  if ! validate_provider_name "$name"; then
+    return 1
+  fi
+
+  read -r -p "Base URL: " base_url
+  read -rs -p "API Key: " api_key; echo
+  read -r -p "Default model (optional): " model
+
+  { [ -z "$name" ] || [ -z "$base_url" ] || [ -z "$api_key" ]; } && { error "Name, Base URL and API Key are required"; return 1; }
+
+  # Validate inputs
+  if ! validate_url "$base_url"; then
+    return 1
+  fi
+
+  if ! validate_api_key "$api_key" "custom"; then
+    return 1
+  fi
+
+  if [ -n "$model" ] && ! validate_model_name "$model"; then
+    return 1
+  fi
+
+  set_config "custom_${name}_api_key" "$api_key"
+  set_config "custom_${name}_base_url" "$base_url"
+  [ -n "$model" ] && set_config "custom_${name}_model" "$model"
+
+  success "Custom provider '$name' configured. Use: clauver $name"
+}
+
 cmd_config() {
   local provider="${1:-}"
 
   if [ -z "$provider" ]; then
-    error "Usage: clauver config <provider>"
-    echo
-    echo "Available providers: anthropic, zai, minimax, kimi, katcoder, custom"
-    echo "Example: clauver config zai"
+    config_show_usage
     return 1
   fi
 
   case "$provider" in
     anthropic)
-      echo
-      success "Native Anthropic is ready to use!"
-      echo "No configuration needed. Simply run: clauver anthropic"
+      config_anthropic
       ;;
     zai|minimax|kimi|katcoder)
-      echo
-      echo -e "${BOLD}${provider^^} Configuration${NC}"
-      local key_name="${provider^^}_API_KEY"
-      local current_key
-      current_key="$(get_secret "$key_name")"
-      [ -n "$current_key" ] && echo "Current key: $(mask_key "$current_key")"
-      read -rs -p "API Key: " key; echo
-      [ -z "$key" ] && { error "Key is required"; return 1; }
-      set_secret "$key_name" "$key"
-
-      # Save endpoint ID for KAT-Coder
-      if [ "$provider" == "katcoder" ]; then
-        local endpoint_id
-        endpoint_id="$(get_config "katcoder_endpoint_id")"
-        [ -n "$endpoint_id" ] && echo "Current endpoint: $endpoint_id"
-        read -r -p "Endpoint ID (e.g., ep-xxx-xxx): " endpoint
-        [ -z "$endpoint" ] && { error "Endpoint ID is required"; return 1; }
-        set_config "katcoder_endpoint_id" "$endpoint"
-      fi
-
-      # Save model and URL for Kimi
-      if [ "$provider" == "kimi" ]; then
-        local current_model
-        current_model="$(get_config "kimi_model")"
-        [ -n "$current_model" ] && echo "Current model: $current_model"
-        read -r -p "Model (default: kimi-for-coding): " model
-        model="${model:-kimi-for-coding}"
-        [ -n "$model" ] && set_config "kimi_model" "$model"
-
-        local current_url
-        current_url="$(get_config "kimi_base_url")"
-        [ -n "$current_url" ] && echo "Current base URL: $current_url"
-        read -r -p "Base URL (default: https://api.kimi.com/coding/): " url
-        url="${url:-https://api.kimi.com/coding/}"
-        [ -n "$url" ] && set_config "kimi_base_url" "$url"
-      fi
-
-      success "${provider^^} configured. Use: clauver $provider"
-
-      # Show encryption status
-      if [ -f "$SECRETS_AGE" ]; then
-        echo -e "${GREEN}🔒 Secrets encrypted at: $SECRETS_AGE${NC}"
-      fi
+      config_standard_provider "$provider"
       ;;
     custom)
-      echo
-      echo -e "${BOLD}Custom Provider Configuration${NC}"
-      read -r -p "Provider name (e.g., 'my-provider'): " name
-
-      if [[ ! "$name" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-        error "Invalid name. Use letters, numbers, underscore and hyphen only."
-        return 1
-      fi
-
-      if [[ "$name" == "anthropic" || "$name" == "zai" || "$name" == "minimax" || "$name" == "kimi" || "$name" == "katcoder" ]]; then
-        error "Provider name '$name' is reserved."
-        return 1
-      fi
-
-      read -r -p "Base URL: " base_url
-      read -rs -p "API Key: " api_key; echo
-      read -r -p "Default model (optional): " model
-
-      { [ -z "$name" ] || [ -z "$base_url" ] || [ -z "$api_key" ]; } && { error "Name, Base URL and API Key are required"; return 1; }
-
-      set_config "custom_${name}_api_key" "$api_key"
-      set_config "custom_${name}_base_url" "$base_url"
-      [ -n "$model" ] && set_config "custom_${name}_model" "$model"
-
-      success "Custom provider '$name' configured. Use: clauver $name"
+      config_custom_provider
       ;;
     *)
       error "Unknown provider: '$provider'"
@@ -621,6 +683,256 @@ cmd_config() {
   esac
 }
 
+# Provider abstraction layer
+declare -A PROVIDER_CONFIGS=(
+  ["zai"]="Z.AI|https://api.z.ai/api/anthropic|ZAI_API_KEY|glm-4.5-air|glm-4.6|glm-4.6"
+  ["minimax"]="MiniMax|https://api.minimax.io/anthropic|MINIMAX_API_KEY|MiniMax-M2|MiniMax-M2|MiniMax-M2"
+  ["katcoder"]="KAT-Coder|https://api.kwaipilot.com/v1|KATCODER_API_KEY|claude-3-5-sonnet-20241022|claude-3-5-sonnet-20241022|claude-3-5-sonnet-20241022"
+)
+
+# Provider configuration metadata
+declare -A PROVIDER_REQUIRES=(
+  ["zai"]="api_key"
+  ["minimax"]="api_key"
+  ["kimi"]="api_key,model,url"
+  ["katcoder"]="api_key,endpoint_id"
+)
+
+# Generic provider switching function
+switch_to_provider() {
+  local provider="$1"
+  shift
+
+  # Handle anthropic specially (no API key needed)
+  if [ "$provider" = "anthropic" ]; then
+    switch_to_anthropic "$@"
+    return
+  fi
+
+  # Check if provider is supported
+  if ! [[ -v "PROVIDER_CONFIGS[$provider]" ]] && [ "$provider" != "kimi" ]; then
+    error "Provider '$provider' not supported"
+    exit 1
+  fi
+
+  load_secrets
+
+  # Validate required configuration
+  local requirements="${PROVIDER_REQUIRES[$provider]:-api_key}"
+  IFS=',' read -ra required_fields <<< "$requirements"
+
+  for field in "${required_fields[@]}"; do
+    case "$field" in
+      "api_key")
+        local key_var="${provider^^}_API_KEY"
+        if [ "$provider" = "katcoder" ]; then
+          key_var="KATCODER_API_KEY"
+        fi
+        local api_key
+        api_key="$(get_secret "$key_var")"
+        if [ -z "$api_key" ]; then
+          error "${provider^^} not configured. Run: clauver config $provider"
+          exit 1
+        fi
+        ;;
+      "endpoint_id")
+        local endpoint_id
+        endpoint_id="$(get_config "${provider}_endpoint_id")"
+        if [ -z "$endpoint_id" ]; then
+          error "${provider^^} endpoint ID missing. Run: clauver config $provider"
+          exit 1
+        fi
+        ;;
+      "model")
+        local model
+        model="$(get_config "${provider}_model")"
+        if [ "$provider" = "kimi" ]; then
+          model="${model:-kimi-for-coding}"
+        fi
+        ;;
+      "url")
+        local url
+        url="$(get_config "${provider}_base_url")"
+        if [ "$provider" = "kimi" ]; then
+          url="${url:-https://api.kimi.com/coding/}"
+        fi
+        ;;
+    esac
+  done
+
+  # Set provider-specific environment
+  case "$provider" in
+    "zai")
+      banner "Zhipu AI (GLM Models)"
+      export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4.6"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.6"
+      ;;
+    "minimax")
+      banner "MiniMax (MiniMax-M2)"
+      export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_MODEL="MiniMax-M2"
+      export ANTHROPIC_SMALL_FAST_MODEL="MiniMax-M2"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="MiniMax-M2"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="MiniMax-M2"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="MiniMax-M2"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="120"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="24576"
+      ;;
+    "kimi")
+      banner "Moonshot AI (Kimi)"
+      export ANTHROPIC_BASE_URL="$url"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_MODEL="$model"
+      export ANTHROPIC_SMALL_FAST_MODEL="$model"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="240"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="200000"
+      ;;
+    "katcoder")
+      banner "Kwaipilot (KAT-Coder)"
+      export ANTHROPIC_BASE_URL="https://api.kwaipilot.com/v1/chat/completions"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_API_KEY="katcoder-$api_key"
+      export ANTHROPIC_MODEL="claude-3-5-sonnet-20241022"
+      export ANTHROPIC_SMALL_FAST_MODEL="claude-3-5-sonnet-20241022"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="claude-3-5-sonnet-20241022"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="claude-3-5-sonnet-20241022"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="claude-3-5-sonnet-20241022"
+      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="600"
+      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="200000"
+      export ANTHROPIC_SMALL_FAST_MODEL_CUMULATIVE_TIMEOUT="2400"
+      export KATCODER_ENDPOINT_ID="$endpoint_id"
+      ;;
+  esac
+
+  exec claude "$@"
+}
+
+# Input validation framework
+validate_api_key() {
+  local key="$1"
+  local provider="$2"
+
+  # Basic validation - non-empty and reasonable length
+  if [ -z "$key" ]; then
+    error "API key cannot be empty"
+    return 1
+  fi
+
+  # Check minimum length (most API keys are at least 20 chars)
+  if [ ${#key} -lt 10 ]; then
+    error "API key too short (minimum 10 characters)"
+    return 1
+  fi
+
+  # Provider-specific validation
+  case "$provider" in
+    "zai"|"minimax"|"kimi")
+      # Most API keys are alphanumeric with some special chars
+      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        warn "API key contains unusual characters for $provider"
+      fi
+      ;;
+    "katcoder")
+      # KAT-Coder keys might have different format
+      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        warn "API key contains unusual characters for KAT-Coder"
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+validate_url() {
+  local url="$1"
+
+  # Basic URL validation
+  if [ -z "$url" ]; then
+    error "URL cannot be empty"
+    return 1
+  fi
+
+  # Check URL format
+  if [[ ! "$url" =~ ^https?:// ]]; then
+    error "URL must start with http:// or https://"
+    return 1
+  fi
+
+  # Check for valid hostname
+  if [[ ! "$url" =~ ^https?://[a-zA-Z0-9.-]+ ]]; then
+    error "Invalid URL format"
+    return 1
+  fi
+
+  return 0
+}
+
+validate_provider_name() {
+  local provider="$1"
+
+  # Check if provider name is valid
+  if [ -z "$provider" ]; then
+    error "Provider name cannot be empty"
+    return 1
+  fi
+
+  # Check for valid characters (alphanumeric, underscore, hyphen)
+  if [[ ! "$provider" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    error "Provider name can only contain letters, numbers, underscores, and hyphens"
+    return 1
+  fi
+
+  # Check if name is reserved
+  local reserved_names=("anthropic" "zai" "minimax" "kimi" "katcoder")
+  for reserved in "${reserved_names[@]}"; do
+    if [ "$provider" = "$reserved" ]; then
+      error "Provider name '$provider' is reserved"
+      return 1
+    fi
+  done
+
+  return 0
+}
+
+validate_endpoint_id() {
+  local endpoint_id="$1"
+
+  if [ -z "$endpoint_id" ]; then
+    error "Endpoint ID cannot be empty"
+    return 1
+  fi
+
+  # KAT-Coder endpoint IDs typically follow pattern ep-xxx-xxx
+  if [[ ! "$endpoint_id" =~ ^ep-[a-zA-Z0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+    warn "Endpoint ID format unusual (expected: ep-xxx-xxx)"
+  fi
+
+  return 0
+}
+
+validate_model_name() {
+  local model="$1"
+
+  if [ -z "$model" ]; then
+    error "Model name cannot be empty"
+    return 1
+  fi
+
+  # Basic model name validation
+  if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    warn "Model name contains unusual characters"
+  fi
+
+  return 0
+}
+
 switch_to_anthropic() {
   banner "Native Anthropic"
   echo -e "${BOLD}Using Native Anthropic${NC}"
@@ -628,104 +940,19 @@ switch_to_anthropic() {
 }
 
 switch_to_zai() {
-  load_secrets
-  local zai_key
-  zai_key="$(get_secret "ZAI_API_KEY")"
-  if [ -z "$zai_key" ]; then
-    error "Z.AI not configured. Run: clauver config zai"
-    exit 1
-  fi
-
-  banner "Zhipu AI (GLM Models)"
-
-  export ANTHROPIC_BASE_URL="https://api.z.ai/api/anthropic"
-  export ANTHROPIC_AUTH_TOKEN="$zai_key"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="glm-4.6"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="glm-4.6"
-
-  exec claude "$@"
+  switch_to_provider "zai" "$@"
 }
 
 switch_to_minimax() {
-  load_secrets
-  local minimax_key
-  minimax_key="$(get_secret "MINIMAX_API_KEY")"
-  if [ -z "$minimax_key" ]; then
-    error "MiniMax not configured. Run: clauver config minimax"
-    exit 1
-  fi
-
-  banner "MiniMax (MiniMax-M2)"
-
-  export ANTHROPIC_BASE_URL="https://api.minimax.io/anthropic"
-  export ANTHROPIC_AUTH_TOKEN="$minimax_key"
-  export ANTHROPIC_MODEL="MiniMax-M2"
-  export ANTHROPIC_SMALL_FAST_MODEL="MiniMax-M2"
-  export ANTHROPIC_DEFAULT_HAIKU_MODEL="MiniMax-M2"
-  export ANTHROPIC_DEFAULT_SONNET_MODEL="MiniMax-M2"
-  export ANTHROPIC_DEFAULT_OPUS_MODEL="MiniMax-M2"
-  export API_TIMEOUT_MS="3000000"
-  export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
-
-  exec claude "$@"
+  switch_to_provider "minimax" "$@"
 }
 
 switch_to_kimi() {
-  load_secrets
-  local kimi_key
-  kimi_key="$(get_secret "KIMI_API_KEY")"
-  if [ -z "$kimi_key" ]; then
-    error "Kimi not configured. Run: clauver config kimi"
-    exit 1
-  fi
-
-  # Get configured model or use default
-  local kimi_model
-  kimi_model="$(get_config "kimi_model")"
-  kimi_model="${kimi_model:-kimi-for-coding}"
-
-  # Get configured URL or use default
-  local kimi_base_url
-  kimi_base_url="$(get_config "kimi_base_url")"
-  kimi_base_url="${kimi_base_url:-https://api.kimi.com/coding/}"
-
-  banner "Moonshot AI (${kimi_model})"
-
-  export ANTHROPIC_BASE_URL="$kimi_base_url"
-  export ANTHROPIC_AUTH_TOKEN="$kimi_key"
-  export ANTHROPIC_MODEL="$kimi_model"
-  export ANTHROPIC_SMALL_FAST_MODEL="$kimi_model"
-  export API_TIMEOUT_MS="3000000"
-
-  exec claude "$@"
+  switch_to_provider "kimi" "$@"
 }
 
 switch_to_katcoder() {
-  load_secrets
-  local vc_key
-  vc_key="$(get_secret "KATCODER_API_KEY")"
-  local endpoint_id
-  endpoint_id="$(get_config "katcoder_endpoint_id")"
-
-  if [ -z "$vc_key" ]; then
-    error "KAT-Coder not configured. Run: clauver config katcoder"
-    exit 1
-  fi
-  if [ -z "$endpoint_id" ]; then
-    error "KAT-Coder endpoint ID missing. Run: clauver config katcoder"
-    exit 1
-  fi
-
-  banner "Kwaipilot (KAT-Coder)"
-
-  export ANTHROPIC_BASE_URL="https://vanchin.streamlake.ai/api/gateway/v1/endpoints/$endpoint_id/claude-code-proxy"
-  export ANTHROPIC_AUTH_TOKEN="$vc_key"
-  export ANTHROPIC_MODEL="KAT-Coder"
-  export ANTHROPIC_SMALL_FAST_MODEL="KAT-Coder"
-  export API_TIMEOUT_MS="3000000"
-
-  exec claude "$@"
+  switch_to_provider "katcoder" "$@"
 }
 
 switch_to_custom() {
