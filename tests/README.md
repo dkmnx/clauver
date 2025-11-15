@@ -82,6 +82,16 @@ that provides:
 # Run specific test function
 ./run_all_tests.sh specific test_utilities.sh test_logging_functions
 
+# Run CI workflow
+./run_all_tests.sh ci_workflow
+
+# Run CI-specific checks
+./run_all_tests.sh ci_syntax_checks
+./run_all_tests.sh ci_security_scan
+
+# Check dependencies
+./run_all_tests.sh check_deps
+
 # Clean up test artifacts
 ./run_all_tests.sh clean
 
@@ -103,6 +113,12 @@ make providers
 # Run CI suite
 make ci
 
+# Run GitHub Actions CI locally with act
+make ci_act
+
+# Run specific GitHub Actions job
+make ci_act_job JOB=tests
+
 # Generate coverage report
 make coverage
 
@@ -114,6 +130,15 @@ make check
 
 # Run shellcheck
 make shellcheck
+
+# Run CI-specific syntax checks
+make ci_syntax_checks
+
+# Run security scanning
+make ci_security_scan
+
+# Run CI workflow locally
+make ci_workflow
 ```
 
 ### Manual Test Execution
@@ -125,7 +150,31 @@ source test_framework.sh && test_framework_init && source test_utilities.sh
 
 # Run specific test functions
 source test_framework.sh && source test_utilities.sh && test_logging_functions
+
+# Check dependencies before running tests
+./run_all_tests.sh check_deps
 ```
+
+### Dependency Checking
+
+The test suite includes comprehensive dependency checking:
+
+```bash
+# Check all required dependencies
+make check_deps
+
+# Manual dependency check
+./run_all_tests.sh check_deps
+```
+
+**Required Dependencies:**
+- `age` - Encryption tool for secret management
+- `shellcheck` - Shell script linting and analysis
+- `bc` - Calculator for performance tests
+- `curl` - HTTP client for API testing
+
+**Optional Dependencies:**
+- `claude` - Claude CLI (for integration tests)
 
 ## Test Configuration
 
@@ -207,19 +256,36 @@ Tests include various performance scenarios:
 
 The test suite includes a comprehensive GitHub Actions workflow (`.github/workflows/test.yml`):
 
-- **Multi-platform Testing**: Ubuntu, macOS, Windows
+- **Platform Testing**: Ubuntu (optimized for act local testing)
 - **Multiple Python Versions**: 3.9, 3.10, 3.11
-- **Security Scanning**: Gitleaks, bashate
-- **Performance Benchmarking**: Regular performance tracking
-- **Artifacts Upload**: Complete test results and reports
+- **Security Scanning**: Shellcheck, bashate, gitleaks
+- **Performance Benchmarking**: Performance tracking and metrics
+- **Local Testing**: Full support for act (GitHub Actions runner)
 
 ### CI Features
 
-- **Automated Testing**: Runs on push, pull request, and schedule
+- **Automated Testing**: Runs on push, pull request, and weekly schedule
 - **Quality Checks**: Syntax validation, shellcheck, security scanning
-- **Cross-platform**: Tests on multiple operating systems
+- **Local Development**: Same workflow runs locally with act
 - **Performance Tracking**: Baseline performance metrics
-- **Failure Reporting**: Automatic issue creation for failures
+- **Docker-based**: Uses catthehacker/ubuntu:act-latest for consistency
+
+### Local CI with act
+
+Run the exact same GitHub Actions workflow locally:
+
+```bash
+# Install act (GitHub Actions runner)
+curl https://raw.githubusercontent.com/nektos/act/master/install.sh | sudo bash
+
+# Run complete GitHub Actions CI locally
+make ci_act
+
+# Run specific jobs
+make ci_act_job JOB=tests
+make ci_act_job JOB=security-scan
+make ci_act_job JOB=performance-benchmark
+```
 
 ## Test Data Management
 
@@ -332,10 +398,12 @@ If tests interfere with each other:
 
 ### Integration Enhancements
 
-1. **Container Testing**: Docker-based testing environment
-2. **Automated Updates**: Self-updating test suite
-3. **Performance Regression Detection**: Automatic performance issue detection
-4. **Security Regression Detection**: Automated security scanning
+1. **GitHub Actions Integration**: Full local testing with act
+2. **Container Testing**: Docker-based testing environment
+3. **Automated Updates**: Self-updating test suite
+4. **Performance Regression Detection**: Automatic performance issue detection
+5. **Security Regression Detection**: Automated security scanning
+6. **CI/CD Pipeline**: Complete CI workflow locally and in production
 
 ## License
 
