@@ -4,14 +4,24 @@ IFS=$'\n\t'
 umask 077
 
 VERSION="1.6.1"
-BASE="${CLAUVER_HOME:-$HOME/.clauver}"
+
+# Test mode detection - skip global config when running tests
+if [[ "${CLAUVER_TEST_MODE:-}" == "1" ]]; then
+  # In test mode, use only the provided CLAUVER_HOME
+  BASE="${CLAUVER_HOME}"
+else
+  # Normal mode - allow fallback to home directory
+  BASE="${CLAUVER_HOME:-$HOME/.clauver}"
+fi
+
 CONFIG="$BASE/config"
 SECRETS="$BASE/secrets.env"
 SECRETS_AGE="$BASE/secrets.env.age"
 AGE_KEY="$BASE/age.key"
 SECRETS_LOADED=0
 CONFIG_CACHE_LOADED=0
-declare -A CONFIG_CACHE=()
+# shellcheck disable=SC2034
+declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 
 # Configuration constants - extracted from hardcoded values
 declare -A PROVIDER_DEFAULTS=(
@@ -89,7 +99,8 @@ BANNER
 
 # Ensure age encryption key exists
 ensure_age_key() {
-  if [ ! -f "$AGE_KEY" ]; then
+  local current_age_key="${CLAUVER_HOME:-$HOME/.clauver}/age.key"
+  if [ ! -f "$current_age_key" ]; then
     if ! command -v age-keygen &>/dev/null; then
       error "age-keygen command not found. Please install 'age' package."
       echo
@@ -102,9 +113,9 @@ ensure_age_key() {
       return 1
     fi
     log "Generating age encryption key..."
-    age-keygen -o "$AGE_KEY"
-    chmod 600 "$AGE_KEY"
-    success "Age encryption key generated at $AGE_KEY"
+    age-keygen -o "$current_age_key"
+    chmod 600 "$current_age_key"
+    success "Age encryption key generated at $current_age_key"
     echo
     warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
   fi
@@ -197,12 +208,10 @@ load_secrets() {
     fi
 
     # Test decryption first to catch corruption early
-    log "Decrypting secrets..."
     local temp_decrypt
     temp_decrypt=$(mktemp -t clauver_decrypt_XXXXXXXXXX)
     age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
     local decrypt_pid=$!
-    show_progress "Decrypting secrets file" "$decrypt_pid" 0.3
     wait "$decrypt_pid"
 
     local decrypt_exit=$?
@@ -246,16 +255,38 @@ load_secrets() {
 get_config() {
   local key="$1"
 
-  # Load config cache if not already loaded
-  if [ "$CONFIG_CACHE_LOADED" -eq 0 ]; then
-    load_config_cache
+  # Handle test mode where CONFIG_CACHE might not be properly declared
+  if [[ -z "${CONFIG_CACHE_LOADED:-}" ]] || [[ ! -v CONFIG_CACHE ]]; then
+    # Fallback to direct file read if cache is not available
+    if [ -f "$CONFIG" ]; then
+      local value
+      value=$(grep "^${key}=" "$CONFIG" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+      echo "${value:-}"
+    else
+      echo ""
+    fi
+    return
   fi
 
-  # Return from cache with proper check for empty values
-  if [[ -v "CONFIG_CACHE[$key]" ]]; then
-    echo "${CONFIG_CACHE[$key]}"
+  # Ensure config is loaded into cache
+  load_config_cache
+
+  # For keys with special characters (like hyphens), use file read to avoid array issues
+  if [[ "$key" =~ [-] ]]; then
+    if [ -f "$CONFIG" ]; then
+      local value
+      value=$(grep "^${key}=" "$CONFIG" 2>/dev/null | tail -1 | cut -d'=' -f2-)
+      echo "${value:-}"
+    else
+      echo ""
+    fi
   else
-    echo ""
+    # For normal keys, use the cache with safe variable access
+    if [[ -v CONFIG_CACHE["$key"] ]]; then
+      echo "${CONFIG_CACHE[$key]}"
+    else
+      echo ""
+    fi
   fi
 }
 
@@ -265,18 +296,20 @@ load_config_cache() {
   [ "$CONFIG_CACHE_LOADED" -eq 1 ] && return 0
 
   # Clear cache
-  CONFIG_CACHE=()
+  # shellcheck disable=SC2034
+  unset CONFIG_CACHE
+  declare -A CONFIG_CACHE
 
   # Load config file into cache if it exists
   if [ -f "$CONFIG" ]; then
     while IFS="=" read -r key value; do
       # Skip empty lines, comments, and malformed lines
       [[ -z "$key" || "$key" =~ ^[[:space:]]*# || -z "$value" ]] && continue
-      # Sanitize key format
-      if [[ "$key" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
+      # Sanitize key format and ensure key is not empty
+      if [[ -n "$key" && "$key" =~ ^[a-zA-Z0-9_.-]+$ ]]; then
         CONFIG_CACHE["$key"]="$value"
       fi
-    done < "$CONFIG"
+    done < "$CONFIG" 2>/dev/null || true
   fi
 
   # Mark cache as loaded
@@ -305,6 +338,9 @@ set_config() {
     return 1
   fi
 
+  # Ensure config directory exists
+  mkdir -p "$(dirname "$CONFIG")"
+
   local tmp
   tmp="$(mktemp "${CONFIG}.XXXXXX")"
   if [ -f "$CONFIG" ]; then
@@ -319,6 +355,7 @@ set_config() {
 
   # Invalidate cache to force reload on next access
   CONFIG_CACHE_LOADED=0
+  # shellcheck disable=SC2034
   CONFIG_CACHE=()
 }
 
@@ -392,7 +429,7 @@ get_latest_version() {
   fi
 
   log "Checking for updates..."
-  local latest_version
+  local latest_version=""
   # Run curl in background with timeout for progress indicator
   local temp_output
   temp_output=$(mktemp -t clauver_version_XXXXXXXXXX)
@@ -420,15 +457,17 @@ get_latest_version() {
 
 cmd_version() {
   local latest_version
-  echo "Current version: v${VERSION}"
+  printf "Current version: v%s\n" "$VERSION"
 
-  latest_version=$(get_latest_version 2>/dev/null)
+  latest_version=$(get_latest_version 2>/dev/null | tail -n1)
   if [ -n "$latest_version" ]; then
     if [ "$VERSION" = "$latest_version" ]; then
       success "You are on the latest version"
-    else
+    elif [ "$VERSION" = "$(printf '%s\n' "$VERSION" "$latest_version" | sort -V | head -n1)" ] && [ "$VERSION" != "$latest_version" ]; then
       warn "Update available: v${latest_version}"
       echo "Run 'clauver update' to upgrade"
+    else
+      echo "! You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
     fi
   else
     warn "Could not check for updates"
@@ -914,12 +953,33 @@ validate_api_key() {
     return 1
   fi
 
+  # Security validation - prevent injection attacks
+  # Reject dangerous characters that could be used for command injection
+  local dangerous_chars='[;`$|&<>]'
+  if [[ "$key" =~ [$dangerous_chars] ]]; then
+    error "API key contains dangerous characters that could be used for injection attacks"
+    return 1
+  fi
+
+  # Reject potential command substitution patterns
+  if [[ "$key" =~ \$\(.*\) ]]; then
+    error "API key contains potential command substitution pattern"
+    return 1
+  fi
+
+  # Reject quote characters that could break parsing
+  if [[ "$key" =~ [\'\"] ]]; then
+    error "API key contains quote characters that could break parsing"
+    return 1
+  fi
+
   # Provider-specific validation
   case "$provider" in
     "zai"|"minimax"|"kimi")
       # Most API keys are alphanumeric with some special chars
       if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        warn "API key contains unusual characters for $provider"
+        error "API key contains invalid characters for $provider (only alphanumeric, dot, underscore, hyphen allowed)"
+        return 1
       fi
       ;;
   esac
@@ -978,7 +1038,6 @@ validate_provider_name() {
   return 0
 }
 
-
 validate_model_name() {
   local model="$1"
 
@@ -987,9 +1046,30 @@ validate_model_name() {
     return 1
   fi
 
-  # Basic model name validation
+  # Security validation - prevent injection attacks
+  # Reject dangerous characters that could be used for command injection
+  local dangerous_chars='[;`$|&<>]'
+  if [[ "$model" =~ [$dangerous_chars] ]]; then
+    error "Model name contains dangerous characters that could be used for injection attacks"
+    return 1
+  fi
+
+  # Reject potential command substitution patterns
+  if [[ "$model" =~ \$\(.*\) ]]; then
+    error "Model name contains potential command substitution pattern"
+    return 1
+  fi
+
+  # Reject quote characters that could break parsing
+  if [[ "$model" =~ [\'\"] ]]; then
+    error "Model name contains quote characters that could break parsing"
+    return 1
+  fi
+
+  # Basic model name validation - only allow safe characters
   if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    warn "Model name contains unusual characters"
+    error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
+    return 1
   fi
 
   return 0
@@ -1012,7 +1092,6 @@ switch_to_minimax() {
 switch_to_kimi() {
   switch_to_provider "kimi" "$@"
 }
-
 
 switch_to_custom() {
   local provider_name="$1"
@@ -1411,6 +1490,8 @@ EOF
   echo "  claude \"your prompt\" # Use current provider"
 }
 
+# Only execute main logic if this script is being run directly, not sourced
+if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
 case "${1:-}" in
   help|-h|--help)
     show_help
@@ -1526,3 +1607,4 @@ case "${1:-}" in
     fi
     ;;
 esac
+fi
