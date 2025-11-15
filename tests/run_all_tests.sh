@@ -315,7 +315,8 @@ ci_syntax_checks() {
     # Check all test files
     echo "Checking all test files..."
     for test_file in "$TEST_ROOT"/test_*.sh; do
-        local filename=$(basename "$test_file")
+        local filename
+        filename=$(basename "$test_file")
         echo -n "  Checking $filename... "
         if bash -n "$test_file"; then
             echo "✓"
