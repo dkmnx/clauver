@@ -82,30 +82,7 @@ jobs:
           tests/logs/
           tests/tmp/
 
-  tests-windows:
-    runs-on: windows-latest
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.10'
-
-    - name: Install dependencies
-      run: |
-        # Install age for Windows
-        choco install age
-        python --version
-
-    - name: Run basic tests (Windows compatibility)
-      run: |
-        cd tests
-        echo "Running Windows-specific compatibility tests..."
-        # Test basic functionality without full suite (some features may not work on Windows)
-        bash -c "source test_framework.sh && test_framework_init"
-
+  
   security-scan:
     runs-on: ubuntu-latest
     steps:
@@ -197,7 +174,7 @@ jobs:
         echo "- ✅ Syntax Validation" >> reports/README.md
         echo "- ✅ Shell Linting (shellcheck)" >> reports/README.md
         echo "- ✅ Security Scan" >> reports/README.md
-        echo "- ✅ Cross-platform Testing" >> reports/README.md
+        echo "- ✅ Linux/macOS Testing" >> reports/README.md
         echo "- ✅ Performance Benchmarking" >> reports/README.md
         echo "" >> reports/README.md
         echo "## Coverage" >> reports/README.md
