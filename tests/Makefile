@@ -110,8 +110,9 @@ check:
 
 # Run shellcheck on test files
 shellcheck:
-	@echo "Running shellcheck on test files..."
-	@shellcheck $(TEST_FILES) $(FRAMEWORK) 2>/dev/null || true
+	@echo "Running shellcheck on all shell files..."
+	@echo "Files being checked: $(TEST_FILES) $(FRAMEWORK) run_all_tests.sh"
+	@shellcheck $(TEST_FILES) $(FRAMEWORK) run_all_tests.sh || echo "⚠️ Shellcheck found issues (see above)"
 
 # Run quick smoke test
 smoke: setup_deps
