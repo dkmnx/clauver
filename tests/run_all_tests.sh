@@ -250,6 +250,167 @@ cleanup_tests() {
     echo -e "${GREEN}✅ Cleanup completed${NC}"
 }
 
+# Function to check dependencies
+check_dependencies() {
+    echo -e "${BLUE}🔍 Checking required dependencies...${NC}"
+
+    local missing_deps=()
+    local optional_deps=()
+
+    # Check required dependencies
+    local deps=("age" "shellcheck" "bc" "curl")
+    for dep in "${deps[@]}"; do
+        if which "$dep" >/dev/null 2>&1; then
+            echo -e "  ✓ $dep: $(which "$dep")"
+        else
+            echo -e "  ❌ $dep: NOT FOUND"
+            missing_deps+=("$dep")
+        fi
+    done
+
+    # Check optional dependencies
+    if which "claude" >/dev/null 2>&1; then
+        echo -e "  ✓ claude: $(which "claude")"
+    else
+        echo -e "  ⚠️ claude: NOT FOUND (optional but recommended)"
+        optional_deps+=("claude")
+    fi
+
+    # Summary
+    if [ ${#missing_deps[@]} -eq 0 ]; then
+        echo -e "${GREEN}✅ All required dependencies found${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Missing required dependencies: ${missing_deps[*]}${NC}"
+        echo -e "${YELLOW}Install with: sudo apt install ${missing_deps[*]}${NC}"
+        return 1
+    fi
+}
+
+# Function to run CI syntax checks
+ci_syntax_checks() {
+    echo -e "${BLUE}🔍 Running CI syntax checks...${NC}"
+    echo "================================"
+
+    local failed=0
+
+    # Check main script
+    echo "Checking clauver.sh..."
+    if bash -n "$CLAUVER_SCRIPT"; then
+        echo -e "  ✓ clauver.sh syntax OK"
+    else
+        echo -e "  ❌ clauver.sh syntax FAILED"
+        failed=1
+    fi
+
+    # Check test framework
+    echo "Checking test_framework.sh..."
+    if bash -n "$TEST_ROOT/test_framework.sh"; then
+        echo -e "  ✓ test_framework.sh syntax OK"
+    else
+        echo -e "  ❌ test_framework.sh syntax FAILED"
+        failed=1
+    fi
+
+    # Check all test files
+    echo "Checking all test files..."
+    for test_file in "$TEST_ROOT"/test_*.sh; do
+        local filename=$(basename "$test_file")
+        echo -n "  Checking $filename... "
+        if bash -n "$test_file"; then
+            echo "✓"
+        else
+            echo "❌"
+            failed=1
+        fi
+    done
+
+    echo "================================"
+    if [ $failed -eq 0 ]; then
+        echo -e "${GREEN}✅ All syntax checks passed${NC}"
+        return 0
+    else
+        echo -e "${RED}❌ Some syntax checks failed${NC}"
+        return 1
+    fi
+}
+
+# Function to run CI security scan
+ci_security_scan() {
+    echo -e "${BLUE}🔒 Running CI security scan...${NC}"
+    echo "================================"
+
+    # Run shellcheck
+    echo "Running shellcheck..."
+    local shellcheck_failed=0
+    for file in "$CLAUVER_SCRIPT" "$TEST_ROOT/test_framework.sh" "$TEST_ROOT"/test_*.sh; do
+        echo -n "  Checking $(basename "$file")... "
+        if shellcheck "$file" >/dev/null 2>&1; then
+            echo "✓"
+        else
+            echo "⚠️ (issues found)"
+            shellcheck_failed=1
+        fi
+    done
+
+    # Check for potential secrets
+    echo "Checking for potential secrets..."
+    if grep -r "sk-[a-zA-Z0-9]" "$TEST_ROOT" 2>/dev/null | grep -v ".git" | head -5; then
+        echo -e "${YELLOW}⚠️ Potential API keys found - review above${NC}"
+    else
+        echo -e "  ✓ No obvious API keys found"
+    fi
+
+    echo "================================"
+    if [ $shellcheck_failed -eq 0 ]; then
+        echo -e "${GREEN}✅ Security scan completed${NC}"
+        return 0
+    else
+        echo -e "${YELLOW}⚠️ Security scan completed with issues (review above)${NC}"
+        return 0  # Don't fail CI for shellcheck issues
+    fi
+}
+
+# Function to run CI workflow
+ci_workflow() {
+    echo -e "${BOLD}${BLUE}🚀 Clauver CI Workflow${NC}"
+    echo "================================"
+    echo "Script: $CLAUVER_SCRIPT"
+    echo "Root: $TEST_ROOT"
+    echo "Date: $(date)"
+    echo
+
+    local failed=0
+
+    # Check dependencies
+    check_dependencies || failed=1
+    echo
+
+    # Run syntax checks
+    ci_syntax_checks || failed=1
+    echo
+
+    # Run security scan
+    ci_security_scan
+    echo
+
+    # Run all tests
+    run_all_tests
+    echo
+
+    # Generate report
+    generate_test_report
+    echo
+
+    echo "================================"
+    if [ $failed -eq 0 ]; then
+        echo -e "${GREEN}✅ CI workflow completed successfully${NC}"
+    else
+        echo -e "${RED}❌ CI workflow completed with failures${NC}"
+        return 1
+    fi
+}
+
 # Function to show help
 show_help() {
     echo -e "${BOLD}Clauver Test Runner${NC}"
@@ -262,6 +423,10 @@ show_help() {
     echo "  specific <file> <func> Run specific test function"
     echo "  report                 Generate test report"
     echo "  clean                  Clean up test artifacts"
+    echo "  ci_syntax_checks       Run CI syntax validation"
+    echo "  ci_security_scan       Run security scanning"
+    echo "  ci_workflow            Run complete CI workflow"
+    echo "  check_deps             Check required dependencies"
     echo "  help                   Show this help message"
     echo
     echo "Available test categories:"
@@ -272,7 +437,9 @@ show_help() {
     echo "Examples:"
     echo "  $0 all                    # Run all tests"
     echo "  $0 utilities              # Run utility tests only"
+    echo "  $0 ci_workflow            # Run complete CI workflow"
     echo "  $0 specific test_utilities.sh test_logging_functions"
+    echo "  $0 check_deps             # Check dependencies only"
     echo
 }
 
@@ -296,6 +463,18 @@ main() {
             ;;
         "clean")
             cleanup_tests
+            ;;
+        "check_deps")
+            check_dependencies
+            ;;
+        "ci_syntax_checks")
+            ci_syntax_checks
+            ;;
+        "ci_security_scan")
+            ci_security_scan
+            ;;
+        "ci_workflow")
+            ci_workflow
             ;;
         "help"|"-h"|"--help")
             show_help
