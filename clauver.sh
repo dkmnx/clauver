@@ -317,7 +317,7 @@ cmd_version() {
   echo "Current version: v${VERSION}"
 
   latest_version=$(get_latest_version 2>/dev/null)
-  if [ $? -eq 0 ] && [ -n "$latest_version" ]; then
+  if [ -n "$latest_version" ]; then
     if [ "$VERSION" = "$latest_version" ]; then
       success "You are on the latest version"
     else
