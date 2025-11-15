@@ -134,7 +134,7 @@ test_config_functions() {
 
     # Clear any existing config cache
     unset CONFIG_CACHE
-    CONFIG_CACHE_LOADED=0
+    export CONFIG_CACHE_LOADED=0
 
     # Test set_config and get_config
     set_config "test_key" "test_value"

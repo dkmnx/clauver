@@ -17,7 +17,6 @@ measure_performance() {
 
     # Execute command with timeout
     timeout "$timeout" bash -c "$command" >/dev/null 2>&1
-    local exit_code=$?
 
     # End time measurement
     local end_time
@@ -58,19 +57,11 @@ test_encryption_performance() {
 
     setup_test_environment "encryption_performance_test"
 
-    # Generate test data of various sizes
-    local small_data="ZAI_API_KEY=sk-small-test-key"
-    local medium_data
-    medium_data=$(printf "ZAI_API_KEY=sk-medium-test-key-with-extra-data\n%.0s" {1..100})
-    local large_data
-    large_data=$(printf "ZAI_API_KEY=sk-large-test-key-with-extra-data\n%.0s" {1..1000})
-
     # Test encryption performance with different data sizes
     export ZAI_API_KEY="sk-performance-test-key"
 
     # Time save_secrets operation
-    local encryption_time
-    encryption_time=$(measure_performance "source $CLAUVER_SCRIPT && save_secrets")
+    measure_performance "source $CLAUVER_SCRIPT && save_secrets" >/dev/null
 
     assert_command_success "save_secrets" "Encryption should succeed"
     assert_file_exists "$CLAUVER_HOME/secrets.env.age" "Encrypted file should exist"
@@ -104,15 +95,18 @@ test_config_caching_performance() {
     # Time cache loading
     local cache_load_time
     cache_load_time=$(measure_performance "source $CLAUVER_SCRIPT && load_config_cache")
+    echo "Cache load time: ${cache_load_time}s"
 
     # Time cache access
     local cache_access_time
     cache_access_time=$(measure_performance "source $CLAUVER_SCRIPT && get_config 'perf_test_key_50'")
+    echo "Cache access time: ${cache_access_time}s"
 
     # Time reload vs cache hit
     load_config_cache
     local cache_hit_time
     cache_hit_time=$(measure_performance "source $CLAUVER_SCRIPT && get_config 'perf_test_key_50'")
+    echo "Cache hit time: ${cache_hit_time}s"
 
     # Verify caching works
     assert_command_success "get_config 'perf_test_key_1'" "Should access cached config"
@@ -149,18 +143,22 @@ EOF
     # Test switching performance
     local switch_zai_time
     switch_zai_time=$(measure_performance "source $CLAUVER_SCRIPT && switch_to_zai --version")
+    echo "ZAI switch time: ${switch_zai_time}s"
 
     local switch_minimax_time
     switch_minimax_time=$(measure_performance "source $CLAUVER_SCRIPT && switch_to_minimax --version")
+    echo "MiniMax switch time: ${switch_minimax_time}s"
 
     local switch_kimi_time
     switch_kimi_time=$(measure_performance "source $CLAUVER_SCRIPT && switch_to_kimi --version")
+    echo "Kimi switch time: ${switch_kimi_time}s"
 
     # Test custom provider switching
     set_config "custom_perf_api_key" "sk-perf-custom-key"
     set_config "custom_perf_base_url" "https://perf.custom.com/"
     local switch_custom_time
     switch_custom_time=$(measure_performance "source $CLAUVER_SCRIPT && switch_to_custom perf --version")
+    echo "Custom provider switch time: ${switch_custom_time}s"
 
     echo "Provider switching performance test completed"
 

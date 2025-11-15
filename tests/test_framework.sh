@@ -494,10 +494,12 @@ run_all_tests() {
 # Write test results to file for test runner to read
 write_test_results() {
     local results_file="$TEST_REPORTS_DIR/test_results.txt"
-    echo "TEST_COUNT=$TEST_COUNT" > "$results_file"
-    echo "TEST_PASSED=$TEST_PASSED" >> "$results_file"
-    echo "TEST_FAILED=$TEST_FAILED" >> "$results_file"
-    echo "TEST_SKIPPED=$TEST_SKIPPED" >> "$results_file"
+    {
+        echo "TEST_COUNT=$TEST_COUNT"
+        echo "TEST_PASSED=$TEST_PASSED"
+        echo "TEST_FAILED=$TEST_FAILED"
+        echo "TEST_SKIPPED=$TEST_SKIPPED"
+    } > "$results_file"
     log_framework "Test results written to: $results_file"
 }
 

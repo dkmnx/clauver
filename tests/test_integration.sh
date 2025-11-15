@@ -196,7 +196,8 @@ EOF
     local version_output
     version_output=$(cmd_version 2>/dev/null) || true
 
-    # Note: In real environment, this would show update available
+    # Restore original version
+    VERSION="$original_version"
 
     cleanup_test_environment "update_workflow_test"
     end_test
