@@ -1,0 +1,199 @@
+# Changelog
+
+All notable changes to Clauver will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [1.8.0] - 2025-01-16
+
+### Added
+
+- Comprehensive CI test suite with security and performance checks
+- Local CI testing with enhanced workflow and dependency checks
+- Performance benchmark job running in containerized environment
+- CI workflow badge to README
+
+### Fixed
+
+- Test reliability improvements and environment setup
+- Shellcheck warnings in test files resolved
+- Variable assignment clarity in syntax checks
+- Makefile output improvements with graceful error handling
+
+### Improved
+
+- Enhanced testing documentation
+- Removed report job from test workflow for cleaner CI output
+
+## [1.7.0] - 2025-01-15
+
+### Added
+
+- Comprehensive testing documentation to README
+- Shell completion updates with new commands and options
+- Troubleshooting guide extraction and documentation reorganization
+
+### Removed
+
+- Deprecated KAT-Coder provider from install script
+- Legacy encryption validation suite
+- Windows test job (focused on Linux compatibility)
+
+### Fixed
+
+- Critical security issues including injection attack prevention
+- Unused variables in test scripts
+- Shellcheck warnings across test files
+- Sensitive test artifacts tracking (improved .gitignore)
+
+### Improved
+
+- Provider configuration and performance defaults
+- Configuration and provider switching logic modularization
+- Security scanning with manual gitleaks installation
+- Test framework renamed for consistency (test-framework.sh → test_framework.sh)
+
+## [1.6.1] - 2025-01-14
+
+### Added
+
+- Comprehensive security improvements
+- Enhanced input validation and sanitization
+- Better protection against injection attacks
+
+### Fixed
+
+- Version check simplification in cmd_version function
+- Security vulnerabilities in API key and model name handling
+
+## [1.6.0] - 2025-01-13
+
+### Added
+
+- **Age encryption** for secure secret storage
+- **Secrets migration functionality** to transition from plaintext to encrypted storage
+- **Encryption key management** with backup and recovery features
+- Comprehensive **encryption and key management documentation**
+
+### Security
+
+- API keys now encrypted at rest using age (X25519)
+- Memory-only decryption via process substitution
+- No plaintext secrets written to disk
+- Automatic key generation and migration support
+
+## [1.5.0] - 2025-01-12
+
+### Added
+
+- **Version check functionality** to display current version
+- **Auto-update capability** to update to latest version
+- Comprehensive version and update commands documentation
+
+### Improved
+
+- README formatting and content clarity
+
+## [1.4.1] - 2025-01-11
+
+### Fixed
+
+- Default provider fallback for unknown commands
+
+## [1.4.0] - 2025-01-10
+
+### Added
+
+- **Configurable base URL support** for Kimi provider
+- **Configurable model support** for Kimi provider
+
+### Improved
+
+- Enhanced installation guide with default provider workflow
+- Installer script references updated in README
+- Installer script renamed to `install.sh` for clarity
+
+## [1.3.1] - 2025-01-09
+
+### Fixed
+
+- Default provider selection for unknown commands
+
+## [1.3.0] - 2025-01-08
+
+### Added
+
+- **Default provider feature** - Set and use a preferred default provider
+- **Automatic provider selection** with configurable defaults
+- Default provider command completion support
+- Comprehensive usage examples in README
+
+### Improved
+
+- README formatting with enhanced project title and description placement
+
+## [1.2.3] - 2025-01-07
+
+### Added
+
+- ASCII art Clauver logo to introduction section
+
+## [1.2.2] - 2025-01-06
+
+### Added
+
+- Caution warning for custom providers in documentation
+
+## [1.2.1] - 2025-01-05
+
+### Improved
+
+- Italic formatting applied to product name references
+- Clarified references to Claude Code API providers
+
+## [1.2.0] - 2025-01-04
+
+### Added
+
+- **Version command** to display current version information
+
+## [1.1.0] - 2025-01-03
+
+### Added
+
+- **Remote installation support** via curl
+- Enhanced installation script with improved script source detection
+- Updated installation instructions for clarity and consistency
+
+### Improved
+
+- Shell completion scripts with normalized whitespace and spacing
+- README formatting improvements
+
+## [1.0.1] - 2025-01-02
+
+### Added
+
+- **Credits** to clother repository for inspiration
+
+### Fixed
+
+- Duplicate checkmark symbols in success messages removed
+
+## [1.0.0] - 2025-01-01
+
+### Added
+
+- **Clauver installer** for automated setup
+- **Shell completions** for bash, zsh, and fish
+- **Core clauver.sh script** with provider management functionality
+- Support for multiple AI providers:
+  - Native Anthropic Claude
+  - Z.AI (Zhipu AI GLM models)
+  - MiniMax (MiniMax-M2 model)
+  - Kimi (Moonshot AI Kimi K2 model)
+  - Custom providers
+- Encrypted API key management
+- Configuration testing and status monitoring
+- Quick setup wizard for beginners

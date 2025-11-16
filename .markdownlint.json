@@ -1,0 +1,14 @@
+{
+  "default": true,
+  "MD024": false,
+  "MD033": {
+    "allowed_elements": ["sub", "sup"]
+  },
+  "MD013": {
+    "line_length": 120,
+    "code_block_line_length": 120,
+    "heading_line_length": 80,
+    "strict": false,
+    "stern": false
+  }
+}
