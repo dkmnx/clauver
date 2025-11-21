@@ -1379,6 +1379,18 @@ cmd_default() {
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
+    deepseek)
+      local deepseek_key
+      deepseek_key="$(get_secret "DEEPSEEK_API_KEY")"
+      if [ -z "$deepseek_key" ]; then
+        error "DeepSeek is not configured. Run: clauver config deepseek"
+        return 1
+      fi
+      set_config "default_provider" "$provider"
+      success "Default provider set to: ${provider}"
+      echo "Run 'clauver' without arguments to use this provider."
+      return 0
+      ;;
         *)
       # Check if it's a custom provider
       local custom_key
