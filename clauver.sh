@@ -958,6 +958,18 @@ switch_to_provider() {
       export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[kimi_small_fast_timeout]}"
       export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[kimi_small_fast_max_tokens]}"
       ;;
+    "deepseek")
+      banner "DeepSeek AI"
+      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
+      export ANTHROPIC_AUTH_TOKEN="$api_key"
+      export ANTHROPIC_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+      export ANTHROPIC_SMALL_FAST_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+      export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[deepseek_api_timeout_ms]}"
+      export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
+      ;;
       esac
 
   exec claude "$@"
