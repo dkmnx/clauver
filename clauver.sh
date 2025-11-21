@@ -1132,6 +1132,10 @@ switch_to_kimi() {
   switch_to_provider "kimi" "$@"
 }
 
+switch_to_deepseek() {
+  switch_to_provider "deepseek" "$@"
+}
+
 switch_to_custom() {
   local provider_name="$1"
   shift
@@ -1605,7 +1609,7 @@ case "${1:-}" in
     ;;
   deepseek)
     shift
-    switch_to_provider "deepseek" "$@"
+    switch_to_deepseek "$@"
     ;;
     "")
     # Check if a default provider is set
@@ -1626,7 +1630,7 @@ case "${1:-}" in
           switch_to_kimi "$@"
           ;;
         deepseek)
-          switch_to_provider "deepseek" "$@"
+          switch_to_deepseek "$@"
           ;;
                 *)
           # It's a custom provider
@@ -1663,7 +1667,7 @@ case "${1:-}" in
             switch_to_kimi "$@"
             ;;
           deepseek)
-            switch_to_provider "deepseek" "$@"
+            switch_to_deepseek "$@"
             ;;
                     *)
             # It's a custom provider
