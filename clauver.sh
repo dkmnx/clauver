@@ -859,12 +859,14 @@ cmd_config() {
 declare -A PROVIDER_CONFIGS=(
   ["zai"]="Z.AI|https://api.z.ai/api/anthropic|ZAI_API_KEY|glm-4.5-air|glm-4.6|glm-4.6"
   ["minimax"]="MiniMax|https://api.minimax.io/anthropic|MINIMAX_API_KEY|MiniMax-M2|MiniMax-M2|MiniMax-M2"
+  ["deepseek"]="DeepSeek|https://api.deepseek.com/anthropic|DEEPSEEK_API_KEY|deepseek-chat|deepseek-chat|deepseek-chat"
 )
 
 # Provider configuration metadata
 declare -A PROVIDER_REQUIRES=(
   ["zai"]="api_key"
   ["minimax"]="api_key"
+  ["deepseek"]="api_key"
   ["kimi"]="api_key,model,url"
 )
 
