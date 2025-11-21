@@ -31,6 +31,8 @@ declare -A PROVIDER_DEFAULTS=(
   ["minimax_default_model"]="MiniMax-M2"
   ["kimi_base_url"]="https://api.kimi.com/coding/"
   ["kimi_default_model"]="kimi-for-coding"
+  ["deepseek_base_url"]="https://api.deepseek.com/anthropic"
+  ["deepseek_default_model"]="deepseek-chat"
 )
 
 # Timeout and token limits
@@ -41,6 +43,7 @@ declare -A PERFORMANCE_DEFAULTS=(
   ["minimax_small_fast_max_tokens"]="24576"
   ["kimi_small_fast_timeout"]="240"
   ["kimi_small_fast_max_tokens"]="200000"
+  ["deepseek_api_timeout_ms"]="600000"
   ["test_api_timeout_ms"]="3000000"
 )
 
