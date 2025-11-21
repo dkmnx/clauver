@@ -1581,6 +1581,10 @@ case "${1:-}" in
     shift
     switch_to_kimi "$@"
     ;;
+  deepseek)
+    shift
+    switch_to_provider "deepseek" "$@"
+    ;;
     "")
     # Check if a default provider is set
     default_provider="$(get_config "default_provider")"
@@ -1598,6 +1602,9 @@ case "${1:-}" in
           ;;
         kimi)
           switch_to_kimi "$@"
+          ;;
+        deepseek)
+          switch_to_provider "deepseek" "$@"
           ;;
                 *)
           # It's a custom provider
@@ -1632,6 +1639,9 @@ case "${1:-}" in
             ;;
           kimi)
             switch_to_kimi "$@"
+            ;;
+          deepseek)
+            switch_to_provider "deepseek" "$@"
             ;;
                     *)
             # It's a custom provider
