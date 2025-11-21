@@ -662,7 +662,7 @@ cmd_list() {
   echo "  Description: Use your Claude Pro/Team subscription"
   echo
 
-  for provider in zai minimax kimi; do
+  for provider in zai minimax kimi deepseek; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -704,7 +704,7 @@ cmd_list() {
   fi
 
   echo -e "${YELLOW}Not Configured:${NC}"
-  for provider in zai minimax kimi; do
+  for provider in zai minimax kimi deepseek; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -842,7 +842,7 @@ cmd_config() {
     anthropic)
       config_anthropic
       ;;
-    zai|minimax|kimi)
+    zai|minimax|kimi|deepseek)
       config_standard_provider "$provider"
       ;;
     custom)
@@ -851,7 +851,7 @@ cmd_config() {
     *)
       error "Unknown provider: '$provider'"
       echo
-      echo "Available providers: anthropic, zai, minimax, kimi, custom"
+      echo "Available providers: anthropic, zai, minimax, kimi, deepseek, custom"
       echo "Example: clauver config zai"
       return 1
       ;;
@@ -1179,7 +1179,7 @@ cmd_test() {
         error "Native Anthropic test failed"
       fi
       ;;
-    zai|minimax|kimi)
+    zai|minimax|kimi|deepseek)
       # Load secrets
       load_secrets
 
@@ -1210,6 +1210,10 @@ cmd_test() {
           kimi_model="$(get_config "kimi_model")"
           kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
           export ANTHROPIC_MODEL="$kimi_model"
+          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
+          ;;
+        deepseek)
+          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
           export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
           ;;
               esac
@@ -1273,7 +1277,7 @@ cmd_status() {
   fi
   echo
 
-  for provider in zai minimax kimi; do
+  for provider in zai minimax kimi deepseek; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -1467,10 +1471,11 @@ EOF
   echo "  2) Configure Z.AI (GLM models - requires API key)"
   echo "  3) Configure MiniMax (MiniMax-M2 - requires API key)"
   echo "  4) Configure Kimi (Moonshot AI - requires API key)"
-  echo "  5) Add a custom provider"
-  echo "  6) Skip (I'll configure later)"
+  echo "  5) Configure DeepSeek (DeepSeek Chat - requires API key)"
+  echo "  6) Add a custom provider"
+  echo "  7) Skip (I'll configure later)"
   echo
-  read -r -p "Choose [1-6]: " choice
+  read -r -p "Choose [1-7]: " choice
 
   case "$choice" in
     1)
@@ -1499,10 +1504,15 @@ EOF
       ;;
     5)
       echo
+      echo "Let's configure DeepSeek for you..."
+      cmd_config "deepseek"
+      ;;
+    6)
+      echo
       echo "Let's add your custom provider..."
       cmd_config "custom"
       ;;
-    6)
+    7)
       echo
       warn "Setup skipped."
       echo "Run ${BOLD}clauver setup${NC} anytime to configure a provider."
