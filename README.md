@@ -26,6 +26,7 @@ between different Claude Code API providers, including:
 - **Z.AI** - Zhipu AI's GLM models
 - **MiniMax** - MiniMax AI's MiniMax-M2 model
 - **Kimi** - Moonshot AI's Kimi K2 model
+- **DeepSeek** - DeepSeek AI's DeepSeek models
 - **Custom Providers** - Add your own provider
 
 > _**⚠️ Platform Compatibility**:
@@ -103,6 +104,7 @@ clauver setup        # Interactive setup wizard
 clauver config zai           # Configure Z.AI
 clauver config minimax       # Configure MiniMax
 clauver config kimi          # Configure Kimi
+clauver config deepseek      # Configure DeepSeek
 clauver config anthropic     # Configure Native Anthropic
 clauver config custom        # Add custom provider
 ```
@@ -114,6 +116,7 @@ clauver anthropic    # Use Native Anthropic
 clauver zai          # Use Z.AI
 clauver minimax      # Use MiniMax
 clauver kimi         # Use Kimi
+clauver deepseek     # Use DeepSeek
 clauver <custom>     # Use custom provider
 ```
 
@@ -351,6 +354,7 @@ _Clauver_ uses an encrypted configuration system:
   - `ZAI_API_KEY`
   - `MINIMAX_API_KEY`
   - `KIMI_API_KEY`
+  - `DEEPSEEK_API_KEY`
     - Secrets are only decrypted into memory, never written to disk as plaintext
 
 - **age.key**: Your encryption key (automatically generated)
