@@ -2,10 +2,10 @@
 
 # Clauver Fish Completion
 
-complete -c clauver -n "__fish_use_subcommand" -f -xa "help -h --help setup version -v --version update list status config test default migrate anthropic zai minimax kimi"
+complete -c clauver -n "__fish_use_subcommand" -f -xa "help -h --help setup version -v --version update list status config test default migrate anthropic zai minimax kimi deepseek"
 
-complete -c clauver -n "__fish_seen_subcommand_from test" -xa "anthropic zai minimax kimi"
-complete -c clauver -n "__fish_seen_subcommand_from default" -xa "anthropic zai minimax kimi"
+complete -c clauver -n "__fish_seen_subcommand_from test" -xa "anthropic zai minimax kimi deepseek"
+complete -c clauver -n "__fish_seen_subcommand_from default" -xa "anthropic zai minimax kimi deepseek"
 
 complete -c clauver -n "__fish_seen_subcommand_from help" -d "Show help message"
 complete -c clauver -n "__fish_seen_subcommand_from -h" -d "Show help message"
@@ -25,3 +25,4 @@ complete -c clauver -n "__fish_seen_subcommand_from anthropic" -d "Use Native An
 complete -c clauver -n "__fish_seen_subcommand_from zai" -d "Switch to Z.AI provider"
 complete -c clauver -n "__fish_seen_subcommand_from minimax" -d "Switch to MiniMax provider"
 complete -c clauver -n "__fish_seen_subcommand_from kimi" -d "Switch to Moonshot Kimi provider"
+complete -c clauver -n "__fish_seen_subcommand_from deepseek" -d "Switch to DeepSeek provider"

@@ -8,7 +8,7 @@ _clauver_completion() {
   local cur prev words cword
   _init_completion || return
 
-  local commands="help setup -h --help version -v --version update list status config test default migrate anthropic zai minimax kimi"
+  local commands="help setup -h --help version -v --version update list status config test default migrate anthropic zai minimax kimi deepseek"
 
   if [[ $cword -eq 1 ]]; then
     read -ra COMPREPLY <<< "$(compgen -W "$commands" -- "$cur")"
@@ -16,12 +16,12 @@ _clauver_completion() {
   fi
 
   if [[ "$prev" == "test" ]]; then
-    read -ra COMPREPLY <<< "$(compgen -W "anthropic zai minimax kimi" -- "$cur")"
+    read -ra COMPREPLY <<< "$(compgen -W "anthropic zai minimax kimi deepseek" -- "$cur")"
     return 0
   fi
 
   if [[ "$prev" == "default" ]]; then
-    read -ra COMPREPLY <<< "$(compgen -W "anthropic zai minimax kimi" -- "$cur")"
+    read -ra COMPREPLY <<< "$(compgen -W "anthropic zai minimax kimi deepseek" -- "$cur")"
     return 0
   fi
 

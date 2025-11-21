@@ -12,10 +12,10 @@ _clauver() {
     args)
       case $words[1] in
         test)
-          _arguments '1: :(anthropic zai minimax kimi)'
+          _arguments '1: :(anthropic zai minimax kimi deepseek)'
           ;;
         default)
-          _arguments '1: :(anthropic zai minimax kimi)'
+          _arguments '1: :(anthropic zai minimax kimi deepseek)'
           ;;
         *)
           ;;
@@ -45,6 +45,7 @@ _clauver() {
       'zai:Switch to Z.AI provider'
       'minimax:Switch to MiniMax provider'
       'kimi:Switch to Moonshot Kimi provider'
+      'deepseek:Switch to DeepSeek provider'
     )
     _describe 'commands' commands
   }
