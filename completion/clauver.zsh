@@ -17,6 +17,9 @@ _clauver() {
         default)
           _arguments '1: :(anthropic zai minimax kimi deepseek)'
           ;;
+        config)
+          _arguments '1: :(anthropic zai minimax kimi deepseek custom)'
+          ;;
         *)
           ;;
       esac
@@ -31,6 +34,7 @@ _clauver() {
       '-h:Show help message'
       '--help:Show help message'
       'setup:Interactive setup wizard'
+      '-s:Interactive setup wizard'
       'version:Show current version and check for updates'
       '-v:Show current version and check for updates'
       '--version:Show current version and check for updates'
@@ -46,6 +50,7 @@ _clauver() {
       'minimax:Switch to MiniMax provider'
       'kimi:Switch to Moonshot Kimi provider'
       'deepseek:Switch to DeepSeek provider'
+      'custom:Switch to custom provider'
     )
     _describe 'commands' commands
   }
