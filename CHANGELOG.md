@@ -5,6 +5,31 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.10.0] - 2025-11-22
+
+### Added
+
+- **Comprehensive SHA256 release workflow** - automated release preparation with checksum generation and validation
+- **GitHub release integration** - `--gh-release` flag to automatically create GitHub releases and upload artifacts
+- **Individual SHA256 files** - separate .sha256 files for each release artifact alongside comprehensive SHA256SUMS
+- **Release preparation script** - `scripts/release-prepare.sh` with dry-run support and version validation
+- **Comprehensive release testing** - `tests/test_release.sh` with full test coverage for release functionality
+- **Release process documentation** - detailed installation instructions and workflow integration
+
+### Security
+
+- **SHA256 checksum verification** - cryptographic integrity validation for all release artifacts
+- **Version format validation** - enforced semantic versioning (v{major}.{minor}.{patch}) format
+- **Security-focused release process** - automated artifact verification and validation
+
+### Improved
+
+- **CI/CD workflow integration** - enhanced GitHub Actions workflow with release artifact generation
+- **Release artifact management** - improved organization and verification of distributed files
+- **Development workflow cleanup** - removed AI-generated directories and files from version control
+- **Documentation updates** - enhanced README with release process instructions
+- **Shellcheck compliance** - resolved warnings in release test files
+
 ## [1.9.2] - 2025-11-22
 
 ### Fixed

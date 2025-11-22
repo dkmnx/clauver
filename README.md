@@ -11,7 +11,7 @@
 
 [![CI](https://github.com/dkmnx/clauver/workflows/CI%20Test%20Suite/badge.svg)](https://github.com/dkmnx/clauver/actions)
 [![Shellcheck](https://img.shields.io/badge/shellcheck-passing-brightgreen)](https://github.com/koalaman/shellcheck)
-[![Version](https://img.shields.io/badge/version-1.9.2-blue)](https://github.com/dkmnx/clauver/tree/v1.9.2)
+[![Version](https://img.shields.io/badge/version-1.10.0-blue)](https://github.com/dkmnx/clauver/tree/v1.10.0)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Claude Code Provider Manager** - Switch between multiple Claude Code API
@@ -390,27 +390,32 @@ Clauver follows a secure release process with SHA256 checksum validation:
 ### Making a Release
 
 1. **Version bump**:
+
    ```bash
-   git commit -m "chore: bump version to 1.9.2"
+   git commit -m "chore: bump version to 1.10.0"
    ```
 
 2. **Tag creation**:
+
    ```bash
-   git tag v1.9.2 -m "chore(release): version 1.9.2"
+   git tag v1.10.0 -m "chore(release): version 1.10.0"
    ```
 
 3. **Generate SHA256 files**:
+
    ```bash
-   ./scripts/release-prepare.sh v1.9.2
+   ./scripts/release-prepare.sh v1.10.0
    ```
 
 4. **Commit checksums**:
+
    ```bash
    git add clauver.sh.sha256 dist/SHA256SUMS
-   git commit -m "chore: add SHA256 checksums for v1.9.2"
+   git commit -m "chore: add SHA256 checksums for v1.10.0"
    ```
 
 5. **Push release**:
+
    ```bash
    git push && git push --tags
    ```
