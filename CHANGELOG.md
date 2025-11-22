@@ -5,7 +5,25 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.8.0] - 2025-01-16
+## [1.9.0] - 2025-11-22
+
+### Added
+
+- **DeepSeek provider integration** with full API support and model compatibility
+- DeepSeek-specific configuration and timeout settings
+- DeepSeek command registration in main dispatcher
+- Shell completion support for DeepSeek provider (bash, zsh, fish)
+- Comprehensive changelog file for tracking version changes
+- Markdownlint configuration for consistent documentation formatting
+
+### Improved
+
+- Enhanced security and UX for DeepSeek provider integration
+- Updated provider documentation to include DeepSeek examples
+- Consistent provider switching patterns for DeepSeek
+- Better user clarity with available model information display
+
+## [1.8.0] - 2025-11-15
 
 ### Added
 
@@ -26,7 +44,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced testing documentation
 - Removed report job from test workflow for cleaner CI output
 
-## [1.7.0] - 2025-01-15
+## [1.7.0] - 2025-11-15
 
 ### Added
 
@@ -54,7 +72,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Security scanning with manual gitleaks installation
 - Test framework renamed for consistency (test-framework.sh → test_framework.sh)
 
-## [1.6.1] - 2025-01-14
+## [1.6.1] - 2025-11-15
 
 ### Added
 
@@ -67,7 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Version check simplification in cmd_version function
 - Security vulnerabilities in API key and model name handling
 
-## [1.6.0] - 2025-01-13
+## [1.6.0] - 2025-11-09
 
 ### Added
 
@@ -83,7 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - No plaintext secrets written to disk
 - Automatic key generation and migration support
 
-## [1.5.0] - 2025-01-12
+## [1.5.0] - 2025-11-09
 
 ### Added
 
@@ -95,13 +113,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README formatting and content clarity
 
-## [1.4.1] - 2025-01-11
+## [1.4.1] - 2025-11-07
 
 ### Fixed
 
 - Default provider fallback for unknown commands
 
-## [1.4.0] - 2025-01-10
+## [1.4.0] - 2025-11-07
 
 ### Added
 
@@ -114,13 +132,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer script references updated in README
 - Installer script renamed to `install.sh` for clarity
 
-## [1.3.1] - 2025-01-09
+## [1.3.1] - 2025-11-03
 
 ### Fixed
 
 - Default provider selection for unknown commands
 
-## [1.3.0] - 2025-01-08
+## [1.3.0] - 2025-11-03
 
 ### Added
 
@@ -133,32 +151,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - README formatting with enhanced project title and description placement
 
-## [1.2.3] - 2025-01-07
+## [1.2.3] - 2025-11-03
 
 ### Added
 
 - ASCII art Clauver logo to introduction section
 
-## [1.2.2] - 2025-01-06
+## [1.2.2] - 2025-11-02
 
 ### Added
 
 - Caution warning for custom providers in documentation
 
-## [1.2.1] - 2025-01-05
+## [1.2.1] - 2025-11-02
 
 ### Improved
 
 - Italic formatting applied to product name references
 - Clarified references to Claude Code API providers
 
-## [1.2.0] - 2025-01-04
+## [1.2.0] - 2025-11-02
 
 ### Added
 
 - **Version command** to display current version information
 
-## [1.1.0] - 2025-01-03
+## [1.1.0] - 2025-11-02
 
 ### Added
 
@@ -171,7 +189,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shell completion scripts with normalized whitespace and spacing
 - README formatting improvements
 
-## [1.0.1] - 2025-01-02
+## [1.0.1] - 2025-11-02
 
 ### Added
 
@@ -181,7 +199,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Duplicate checkmark symbols in success messages removed
 
-## [1.0.0] - 2025-01-01
+## [1.0.0] - 2025-11-02
 
 ### Added
 
