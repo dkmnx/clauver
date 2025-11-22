@@ -42,6 +42,7 @@ declare -A TEST_CATEGORIES=(
     ["integration"]="test_integration.sh"
     ["error_handling"]="test_error_handling.sh"
     ["performance"]="test_performance.sh"
+    ["release"]="test_release.sh"
 )
 
 # Test results

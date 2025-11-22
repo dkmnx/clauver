@@ -42,11 +42,20 @@ EOF
 
 # Parse command line arguments
 parse_args() {
+    # Check for help flag first
     if [[ $# -eq 0 ]]; then
         error "Version argument is required"
         show_help
         exit 1
     fi
+
+    # Handle help flag regardless of position
+    for arg in "$@"; do
+        if [[ "$arg" == "--help" ]]; then
+            show_help
+            exit 0
+        fi
+    done
 
     VERSION="$1"
     shift
@@ -60,10 +69,6 @@ parse_args() {
             --no-tests)
                 SKIP_TESTS=true
                 shift
-                ;;
-            --help)
-                show_help
-                exit 0
                 ;;
             *)
                 error "Unknown option: $1"

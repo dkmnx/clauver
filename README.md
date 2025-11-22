@@ -377,6 +377,52 @@ _Clauver_ uses an encrypted configuration system:
 - **Automatic Key Generation**: Encryption key auto-generated on first use
 - **Migration Support**: Seamlessly migrate from plaintext to encrypted storage
 
+## Release Process
+
+Clauver follows a secure release process with SHA256 checksum validation:
+
+### Prerequisites
+
+- Clean git working directory
+- `sha256sum` command available
+- Version follows semantic versioning (v{major}.{minor}.{patch})
+
+### Making a Release
+
+1. **Version bump**:
+   ```bash
+   git commit -m "chore: bump version to 1.9.2"
+   ```
+
+2. **Tag creation**:
+   ```bash
+   git tag v1.9.2 -m "chore(release): version 1.9.2"
+   ```
+
+3. **Generate SHA256 files**:
+   ```bash
+   ./scripts/release-prepare.sh v1.9.2
+   ```
+
+4. **Commit checksums**:
+   ```bash
+   git add clauver.sh.sha256 dist/SHA256SUMS
+   git commit -m "chore: add SHA256 checksums for v1.9.2"
+   ```
+
+5. **Push release**:
+   ```bash
+   git push && git push --tags
+   ```
+
+### Verification
+
+- CI automatically validates SHA256 files for release tags
+- Updates use SHA256 verification for security
+- All checksums follow format: `<64-char-hex>  filename`
+
+For detailed documentation, see [SHA256 Release Workflow](docs/plans/2025-11-22-sha256-release-workflow.md).
+
 ## Troubleshooting
 
 Having issues? See complete **[troubleshooting](TROUBLESHOOTING.md)** guide.

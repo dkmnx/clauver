@@ -13,6 +13,7 @@
 ### Task 1: Add DeepSeek to Provider Configuration Arrays
 
 **Files:**
+
 - Modify: `clauver.sh:859-869`
 
 **Step 1: Update PROVIDER_CONFIGS array**
@@ -57,6 +58,7 @@ git commit -m "feat: add DeepSeek to provider configuration arrays"
 ### Task 2: Add DeepSeek Provider Defaults
 
 **Files:**
+
 - Modify: `clauver.sh:27-34`
 - Modify: `clauver.sh:37-45`
 
@@ -111,6 +113,7 @@ git commit -m "feat: add DeepSeek provider defaults and timeout settings"
 ### Task 3: Add DeepSeek Case to Provider Switching
 
 **Files:**
+
 - Modify: `clauver.sh:923-956`
 
 **Step 1: Add DeepSeek case to switch_to_provider**
@@ -160,6 +163,7 @@ git commit -m "feat: add DeepSeek case to provider switching function"
 ### Task 4: Register DeepSeek Command
 
 **Files:**
+
 - Modify: `clauver.sh:1551-1566`
 - Modify: `clauver.sh:1572-1589`
 - Modify: `clauver.sh:1605-1621`
@@ -255,6 +259,7 @@ git commit -m "feat: register DeepSeek command in main dispatcher"
 ### Task 5: Update Shell Completions
 
 **Files:**
+
 - Modify: `completion/clauver.bash`
 - Modify: `completion/clauver.zsh`
 - Modify: `completion/clauver.fish`
@@ -307,6 +312,7 @@ git commit -m "feat: add DeepSeek to shell completions"
 ### Task 6: Test DeepSeek Integration
 
 **Files:**
+
 - Test: `clauver.sh`
 
 **Step 1: Test syntax validation**
@@ -339,6 +345,7 @@ git commit -m "test: verify DeepSeek integration works correctly"
 ### Task 7: Update Documentation
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 
@@ -384,6 +391,7 @@ git commit -m "docs: add DeepSeek to provider documentation"
 ### Task 8: Final Integration Test
 
 **Files:**
+
 - Test: `clauver.sh`
 
 **Step 1: Test full workflow**
