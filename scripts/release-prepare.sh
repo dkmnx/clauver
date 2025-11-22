@@ -298,7 +298,8 @@ create_github_release() {
         log "Deleted existing GitHub release $version"
     fi
 
-    # Change to dist directory for artifact uploads
+    # Change to project root and check for dist directory
+    cd "$PROJECT_ROOT"
     if [[ ! -d "dist" ]]; then
         error "dist directory not found. Run generate_checksums() first to create release artifacts."
         exit 1
