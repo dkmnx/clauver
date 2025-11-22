@@ -276,7 +276,6 @@ check_working_directory_changes() {
 
     # Process each changed file
     while IFS= read -r line; do
-        local file_status="${line:0:2}"
         local file_path="${line:3}"
 
         local is_critical=false
@@ -484,8 +483,6 @@ verify_checksums() {
 generate_release_notes() {
     local version="$1"
     local changelog_file="$PROJECT_ROOT/CHANGELOG.md"
-    local repo_url
-    repo_url=$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')
 
     # Extract changelog content for this version
     local changelog_content
@@ -499,44 +496,7 @@ generate_release_notes() {
 
     # Generate complete release notes
     local release_notes
-    release_notes="
-$changelog_content
-
-## Artifacts
-- \`clauver-${version}.tar.gz\`: Source archive (tar.gz)
-- \`clauver-${version}.zip\`: Source archive (zip)
-- \`clauver.sh\`: Main script
-- \`SHA256SUMS\`: Comprehensive checksums file
-- Individual \`.sha256\` files for each artifact
-
-## Installation
-
-### Quick Install
-\`\`\`bash
-curl -fsSL https://raw.githubusercontent.com/${repo_url}/main/install.sh | bash
-\`\`\`
-
-### Manual Installation
-\`\`\`bash
-# Clone the repository
-git clone https://github.com/${repo_url} clauver
-cd clauver
-
-# Install
-mkdir -p ~/.clauver/bin
-cp clauver.sh ~/.clauver/bin/clauver
-chmod +x ~/.clauver/bin/clauver
-
-# Add to PATH
-echo \"export PATH=\\\"\$HOME/.clauver/bin:\$PATH\\\"\" >> ~/.bashrc
-source ~/.bashrc
-\`\`\`
-
-## Verification
-\`\`\`bash
-# Verify SHA256 checksums
-sha256sum -c SHA256SUMS
-\`\`\`"
+    release_notes=$changelog_content
 
     echo "$release_notes"
 }
@@ -557,7 +517,7 @@ extract_changelog_for_version() {
 
         if (current_version == target) {
             in_target = 1
-            print $0
+            # Skip the header line since it will be in the title
             next
         } else if (in_target) {
             # We have reached the next version section
