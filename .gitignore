@@ -3,6 +3,9 @@ tests/logs/
 tests/reports/
 tests/tmp/
 
+# Distribution directory (generated release artifacts)
+dist/
+
 # Editor and OS files
 *.swp
 *.swo
