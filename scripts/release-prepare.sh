@@ -162,7 +162,7 @@ check_dependencies() {
 generate_checksums() {
     local version="$1"
 
-    log "Generating SHA256 checksums for v$version..."
+    log "Generating SHA256 checksums for $version..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
         log "[DRY RUN] Would generate clauver.sh.sha256"
