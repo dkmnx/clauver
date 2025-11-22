@@ -16,7 +16,6 @@ warn() { echo -e "${YELLOW}[WARN]${NC} $1"; }
 error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Script configuration
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 DRY_RUN=false
 SKIP_TESTS=false
@@ -196,7 +195,7 @@ generate_checksums() {
 
     # Generate comprehensive SHA256SUMS
     cd dist
-    sha256sum * > SHA256SUMS
+    sha256sum ./* > SHA256SUMS
     cd ..
 
     success "Generated comprehensive SHA256SUMS in dist/"
