@@ -5,6 +5,26 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.0] - 2025-11-22
+
+### Fixed
+
+- **CI/CD workflow efficiency** - removed redundant SHA256 validation job and optimized artifact upload process
+- **Release process documentation** - cleaned up outdated release steps and streamlined release notes generation
+- **Security clarification** - emphasized that secrets are only decrypted in memory and never written to disk
+
+### Refactored
+
+- **Enhanced command completion** - improved shell completion scripts (bash, zsh, fish) with custom options support
+- **Code cleanup and validation** - improved error handling and cleanup processes in clauver.sh
+- **Release script improvements** - enhanced validation, better error handling, and improved project root detection
+
+### Improved
+
+- **File permissions consistency** - updated all test scripts to have executable permissions
+- **README organization** - moved credits section to the end for better documentation flow
+- **GitHub Actions workflow** - upgraded to actions/upload-artifact v4 for improved reliability
+
 ## [1.10.0] - 2025-11-22
 
 ### Added
