@@ -302,7 +302,8 @@ load_config_cache() {
   # Clear cache
   # shellcheck disable=SC2034
   unset CONFIG_CACHE
-  declare -A CONFIG_CACHE
+  # shellcheck disable=SC2034
+  declare -gA CONFIG_CACHE
 
   # Load config file into cache if it exists
   if [ -f "$CONFIG" ]; then
@@ -848,6 +849,10 @@ config_provider_settings() {
         ;;
     esac
   done
+
+  # Force cache reload to ensure new configuration is immediately available
+  CONFIG_CACHE_LOADED=0
+  load_config_cache
 }
 
 config_custom_provider() {
@@ -934,6 +939,10 @@ switch_to_provider() {
   local provider="$1"
   shift
 
+  # Force config cache reload to ensure we have latest configuration
+  CONFIG_CACHE_LOADED=0
+  load_config_cache
+
   # Handle anthropic specially (no API key needed)
   if [ "$provider" = "anthropic" ]; then
     switch_to_anthropic "$@"
@@ -983,46 +992,58 @@ switch_to_provider() {
   # Set provider-specific environment
   case "$provider" in
     "zai")
-      banner "Zhipu AI (GLM Models)"
+      local zai_model
+      zai_model="$(get_config \"zai_model\")"
+      zai_model="${zai_model:-${PROVIDER_DEFAULTS[zai_default_model]}}"
+      banner "Zhipu AI ($zai_model)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[zai_default_model]}"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[zai_default_model]}"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="$zai_model"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="$zai_model"
       ;;
     "minimax")
-      banner "MiniMax (MiniMax-M2)"
+      local minimax_model
+      minimax_model="$(get_config \"minimax_model\")"
+      minimax_model="${minimax_model:-${PROVIDER_DEFAULTS[minimax_default_model]}}"
+      banner "MiniMax ($minimax_model)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
-      export ANTHROPIC_SMALL_FAST_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[minimax_default_model]}"
+      export ANTHROPIC_MODEL="$minimax_model"
+      export ANTHROPIC_SMALL_FAST_MODEL="$minimax_model"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$minimax_model"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="$minimax_model"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="$minimax_model"
       export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[minimax_small_fast_timeout]}"
       export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[minimax_small_fast_max_tokens]}"
       ;;
     "kimi")
-      banner "Moonshot AI (Kimi)"
+      local kimi_model
+      kimi_model="$(get_config \"kimi_model\")"
+      kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
+      banner "Moonshot AI ($kimi_model)"
       export ANTHROPIC_BASE_URL="$url"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="$model"
-      export ANTHROPIC_SMALL_FAST_MODEL="$model"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$model"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="$model"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="$model"
+      export ANTHROPIC_MODEL="$kimi_model"
+      export ANTHROPIC_SMALL_FAST_MODEL="$kimi_model"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$kimi_model"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="$kimi_model"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="$kimi_model"
       export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[kimi_small_fast_timeout]}"
       export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[kimi_small_fast_max_tokens]}"
       ;;
     "deepseek")
-      banner "DeepSeek AI (deepseek Models)"
+      local deepseek_model
+      deepseek_model="$(get_config deepseek_model)"
+      deepseek_model="${deepseek_model:-${PROVIDER_DEFAULTS[deepseek_default_model]}}"
+      banner "DeepSeek AI ($deepseek_model)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
-      export ANTHROPIC_SMALL_FAST_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+      export ANTHROPIC_MODEL="$deepseek_model"
+      export ANTHROPIC_SMALL_FAST_MODEL="$deepseek_model"
+      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$deepseek_model"
+      export ANTHROPIC_DEFAULT_SONNET_MODEL="$deepseek_model"
+      export ANTHROPIC_DEFAULT_OPUS_MODEL="$deepseek_model"
       export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[deepseek_api_timeout_ms]}"
       export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
       ;;
