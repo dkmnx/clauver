@@ -155,7 +155,7 @@ generate_checksums() {
     if [[ "$DRY_RUN" == "true" ]]; then
         log "[DRY RUN] Would generate clauver.sh.sha256"
         log "[DRY RUN] Would create source archives"
-        log "[DRY RUN] Would generate SHA256SUMS"
+        log "[DRY RUN] Would generate individual .sha256 files for each artifact"
         return 0
     fi
 
@@ -193,12 +193,28 @@ generate_checksums() {
     # Copy main files to dist
     cp clauver.sh clauver.sh.sha256 dist/
 
-    # Generate comprehensive SHA256SUMS
+    # Generate individual .sha256 files for each artifact
     cd dist
+
+    # Generate SHA256 for tar.gz
+    sha256sum "clauver-${version}.tar.gz" > "clauver-${version}.tar.gz.sha256"
+    log "Generated clauver-${version}.tar.gz.sha256"
+
+    # Generate SHA256 for zip
+    sha256sum "clauver-${version}.zip" > "clauver-${version}.zip.sha256"
+    log "Generated clauver-${version}.zip.sha256"
+
+    # Generate SHA256 for clauver.sh in dist
+    sha256sum clauver.sh > clauver.sh.sha256
+    log "Generated clauver.sh.sha256"
+
+    # Also generate comprehensive SHA256SUMS for convenience
     sha256sum ./* > SHA256SUMS
+    log "Generated comprehensive SHA256SUMS"
+
     cd ..
 
-    success "Generated comprehensive SHA256SUMS in dist/"
+    success "Generated individual .sha256 files and SHA256SUMS in dist/"
 
     # Show contents
     log "Generated files:"
@@ -285,7 +301,7 @@ show_instructions() {
     echo "   cat dist/SHA256SUMS"
     echo
     echo "2. Add the SHA256 files to git:"
-    echo "   git add clauver.sh.sha256 dist/SHA256SUMS dist/clauver-${version}.*"
+    echo "   git add clauver.sh.sha256 dist/SHA256SUMS dist/clauver-${version}.* dist/*.sha256"
     echo
     echo "3. Commit with conventional commit:"
     echo "   git commit -m \"chore: add SHA256 checksums for $version\""
