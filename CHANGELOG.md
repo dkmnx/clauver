@@ -5,6 +5,28 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2025-11-22
+
+### Fixed
+
+- **Critical test framework fixes** - resolved CLAUVER_HOME initialization order causing mktemp permission errors
+- **DeepSeek provider validation** - added "deepseek" to reserved provider names list to prevent conflicts
+- **Test isolation improvements** - proper clauver.sh sourcing pattern for test environment setup
+- **Utilities test framework** - fixed missing clauver.sh source causing validation function failures
+
+### Improved
+
+- **Test coverage** - comprehensive DeepSeek tests across all test categories
+  (utilities, providers, security, integration, error handling)
+- **Test reliability** - eliminated permission errors and initialization race conditions
+- **Documentation formatting** - improved test README readability with better visual separation
+
+### Added
+
+- **DeepSeek test visibility** - DeepSeek-specific test output now appears in all relevant test suites
+- **Performance constants validation** - DeepSeek API timeout settings validation
+- **Provider defaults verification** - DeepSeek configuration defaults testing
+
 ## [1.9.0] - 2025-11-22
 
 ### Added
