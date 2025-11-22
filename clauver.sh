@@ -155,6 +155,7 @@ save_secrets() {
   [ -n "${ZAI_API_KEY:-}" ] && secrets_data="${secrets_data}ZAI_API_KEY=${ZAI_API_KEY}"$'\n'
   [ -n "${MINIMAX_API_KEY:-}" ] && secrets_data="${secrets_data}MINIMAX_API_KEY=${MINIMAX_API_KEY}"$'\n'
   [ -n "${KIMI_API_KEY:-}" ] && secrets_data="${secrets_data}KIMI_API_KEY=${KIMI_API_KEY}"$'\n'
+  [ -n "${DEEPSEEK_API_KEY:-}" ] && secrets_data="${secrets_data}DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}"$'\n'
 
   # Encrypt directly from memory without temporary files
   log "Encrypting secrets..."
@@ -959,7 +960,7 @@ switch_to_provider() {
       export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[kimi_small_fast_max_tokens]}"
       ;;
     "deepseek")
-      banner "DeepSeek AI"
+      banner "DeepSeek AI (deepseek Models)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_MODEL="${PROVIDER_DEFAULTS[deepseek_default_model]}"
