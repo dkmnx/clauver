@@ -24,6 +24,7 @@ test_age_encryption_basic() {
     export ZAI_API_KEY="sk-test-zai-key-123456789"
     export MINIMAX_API_KEY="sk-test-minimax-key-987654321"
     export KIMI_API_KEY="sk-test-kimi-key-abcdef123"
+    export DEEPSEEK_API_KEY="sk-test-deepseek-key-xyz789xyz"
 
     # Test save_secrets function
     assert_command_success "save_secrets" "Save secrets should succeed"
@@ -40,7 +41,7 @@ test_age_encryption_basic() {
     assert_file_not_exists "$CLAUVER_HOME/secrets.env" "Plaintext file should be removed after encryption"
 
     # Clean up environment variables to prevent test contamination
-    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY
+    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY DEEPSEEK_API_KEY
 
     cleanup_test_environment "encryption_basic_test"
     end_test
@@ -78,7 +79,7 @@ test_age_decryption() {
     assert_equals "$decrypted_minimax_key" "sk-test-minimax-decrypt-456" "Decrypted MiniMax key should be available"
 
     # Clean up environment variables to prevent test contamination
-    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY
+    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY DEEPSEEK_API_KEY
 
     cleanup_test_environment "encryption_decryption_test"
     end_test
@@ -130,7 +131,7 @@ test_secrets_management() {
     assert_equals "$removed_key" "" "Key should be removed"
 
     # Clean up environment variables to prevent test contamination
-    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY
+    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY DEEPSEEK_API_KEY
 
     cleanup_test_environment "secrets_management_test"
     end_test
@@ -171,7 +172,7 @@ test_encryption_error_handling() {
     assert_command_failure "save_secrets" "Save should fail with invalid age key"
 
     # Clean up environment variables to prevent test contamination
-    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY
+    unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY DEEPSEEK_API_KEY
 
     # Remove corrupted age key to prevent test contamination
     rm -f "$CLAUVER_HOME/age.key"

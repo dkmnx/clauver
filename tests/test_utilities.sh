@@ -3,7 +3,7 @@
 # shellcheck disable=SC1091
 # Unit tests for clauver utility functions
 
-# Source the test framework (clauver.sh functions assumed to be available)
+# Source the test framework first
 source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 
 # Test suite for utility functions
@@ -128,6 +128,9 @@ test_config_functions() {
 
     setup_test_environment "config_test"
 
+    # Source clauver script after setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
     # Ensure CLAUVER_HOME is properly set for this test
     export CLAUVER_HOME="$TEST_TEMP_DIR/.clauver"
     mkdir -p "$CLAUVER_HOME"
@@ -167,6 +170,9 @@ test_validation_functions() {
 
     setup_test_environment "validation_test"
 
+    # Source clauver script after setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
     # Test API key validation
     # Valid keys
     assert_command_success "validate_api_key 'sk-test-1234567890' 'zai'" "Z.AI API key validation should accept valid key starting with 'sk-test-'"
@@ -205,6 +211,7 @@ test_validation_functions() {
     assert_command_failure "validate_provider_name 'test@provider'" "Provider name validation should reject special characters like '@'"
     assert_command_failure "validate_provider_name 'anthropic'" "Provider name validation should reject reserved 'anthropic' name"
     assert_command_failure "validate_provider_name 'zai'" "Provider name validation should reject reserved 'zai' name"
+    assert_command_failure "validate_provider_name 'deepseek'" "Provider name validation should reject reserved 'deepseek' name"
 
     # Test model name validation
     # Valid model names
@@ -224,6 +231,9 @@ test_performance_constants() {
 
     setup_test_environment "performance_test"
 
+    # Source clauver script after setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
     # Test that performance defaults are properly defined
     local network_timeout
     network_timeout="${PERFORMANCE_DEFAULTS[network_connect_timeout]}"
@@ -241,6 +251,10 @@ test_performance_constants() {
     kimi_timeout="${PERFORMANCE_DEFAULTS[kimi_small_fast_timeout]}"
     assert_equals "$kimi_timeout" "240" "Kimi timeout should be 240 seconds"
 
+    local deepseek_timeout
+    deepseek_timeout="${PERFORMANCE_DEFAULTS[deepseek_api_timeout_ms]}"
+    assert_equals "$deepseek_timeout" "600000" "DeepSeek API timeout should be 600000ms"
+
     local test_api_timeout
     test_api_timeout="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
     assert_equals "$test_api_timeout" "3000000" "Test API timeout should be 3000000ms"
@@ -253,6 +267,9 @@ test_provider_defaults() {
     start_test "test_provider_defaults" "Test provider configuration defaults"
 
     setup_test_environment "provider_defaults_test"
+
+    # Source clauver script after setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
 
     # Test Z.AI defaults
     local zai_base_url
@@ -280,6 +297,15 @@ test_provider_defaults() {
     local kimi_default_model
     kimi_default_model="${PROVIDER_DEFAULTS[kimi_default_model]}"
     assert_equals "$kimi_default_model" "kimi-for-coding" "Kimi default model should be correct"
+
+    # Test DeepSeek defaults
+    local deepseek_base_url
+    deepseek_base_url="${PROVIDER_DEFAULTS[deepseek_base_url]}"
+    assert_equals "$deepseek_base_url" "https://api.deepseek.com/anthropic" "DeepSeek base URL should be correct"
+
+    local deepseek_default_model
+    deepseek_default_model="${PROVIDER_DEFAULTS[deepseek_default_model]}"
+    assert_equals "$deepseek_default_model" "deepseek-chat" "DeepSeek default model should be correct"
 
     cleanup_test_environment "provider_defaults_test"
     end_test

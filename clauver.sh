@@ -1067,7 +1067,7 @@ validate_provider_name() {
   fi
 
   # Check if name is reserved
-  local reserved_names=("anthropic" "zai" "minimax" "kimi")
+  local reserved_names=("anthropic" "zai" "minimax" "kimi" "deepseek")
   for reserved in "${reserved_names[@]}"; do
     if [ "$provider" = "$reserved" ]; then
       error "Provider name '$provider' is reserved"

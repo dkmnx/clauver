@@ -212,6 +212,9 @@ test_invalid_input_scenarios() {
     assert_command_failure "validate_api_key '' 'zai'" "Empty API key should fail"
     assert_command_failure "validate_api_key 'short' 'zai'" "Short API key should fail"
     assert_command_failure "validate_api_key 'sk-key-with-injection; rm -rf /' 'zai'" "API key with injection should fail"
+    assert_command_failure "validate_api_key '' 'deepseek'" "Empty DeepSeek API key should fail"
+    assert_command_failure "validate_api_key 'invalid' 'deepseek'" "Invalid DeepSeek API key should fail"
+    assert_command_failure "validate_api_key 'deepseek-key-with-injection; rm -rf /' 'deepseek'" "DeepSeek API key with injection should fail"
 
     # Test invalid URLs
     assert_command_failure "validate_url ''" "Empty URL should fail"
@@ -325,6 +328,7 @@ test_user_input_edge_cases() {
 
     # Test API keys with special characters
     assert_command_success "validate_api_key 'sk-test-key-with.special-chars_123' 'zai'" "API key with special chars should pass"
+    assert_command_success "validate_api_key 'sk-deepseek-valid-key-123456' 'deepseek'" "Valid DeepSeek API key should pass"
 
     # Test URLs with various valid formats
     assert_command_success "validate_url 'https://api.example.com:8443/path?param=value'" "URL with port and query should pass"

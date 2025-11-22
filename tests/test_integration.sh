@@ -35,19 +35,23 @@ EOF
     # Step 3: Configure MiniMax provider
     echo "sk-test-minimax-integration-key" | cmd_config "minimax" 2>/dev/null || true
 
-    # Step 4: Set Z.AI as default
+    # Step 4: Configure DeepSeek provider
+    echo "sk-test-deepseek-integration-key" | cmd_config "deepseek" 2>/dev/null || true
+
+    # Step 5: Set Z.AI as default
     cmd_default "zai"
 
-    # Step 5: Verify setup
+    # Step 6: Verify setup
     local list_output
     list_output=$(cmd_list)
     assert_contains "$list_output" "Z.AI" "Z.AI should be configured"
     assert_contains "$list_output" "MiniMax" "MiniMax should be configured"
+    assert_contains "$list_output" "DeepSeek" "DeepSeek should be configured"
 
-    # Step 6: Test default provider usage
+    # Step 7: Test default provider usage
     switch_to_zai --version
 
-    # Step 7: Test provider testing
+    # Step 8: Test provider testing
     cmd_test "zai"
 
     # Step 8: Test status

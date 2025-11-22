@@ -45,6 +45,10 @@ test_provider_switching_basic() {
     set_config "kimi_base_url" "https://api.kimi.com/coding/"
     assert_command_success "switch_to_kimi --version" "Switch to Kimi should succeed with API key and config"
 
+    # Test switch_to_deepseek function
+    export DEEPSEEK_API_KEY="sk-test-deepseek-key-999"
+    assert_command_success "switch_to_deepseek --version" "Switch to DeepSeek should succeed with API key"
+
     cleanup_test_environment "provider_switching_test"
     end_test
 }
@@ -93,6 +97,13 @@ EOF
     local kimi_url
     kimi_url=$(get_config "kimi_base_url")
     assert_equals "$kimi_url" "https://custom.kimi.com/api/" "Kimi URL should be stored"
+
+    # Test DeepSeek configuration
+    echo "sk-test-deepseek-config" | cmd_config "deepseek"
+
+    local deepseek_key
+    deepseek_key=$(get_secret "DEEPSEEK_API_KEY")
+    assert_equals "$deepseek_key" "sk-test-deepseek-config" "DeepSeek API key should be stored"
 
     cleanup_test_environment "provider_config_test"
     end_test
@@ -151,6 +162,10 @@ test_provider_validation() {
     unset KIMI_API_KEY
     assert_command_failure "switch_to_kimi --version" "Switch to Kimi should fail without API key"
 
+    # Test DeepSeek without API key
+    unset DEEPSEEK_API_KEY
+    assert_command_failure "switch_to_deepseek --version" "Switch to DeepSeek should fail without API key"
+
     # Test invalid provider name
     assert_command_failure "switch_to_invalid_provider --version" "Switch to invalid provider should fail"
 
@@ -169,6 +184,7 @@ test_provider_status() {
     # Set up some providers
     export ZAI_API_KEY="sk-zai-status-test"
     export MINIMAX_API_KEY="sk-minimax-status-test"
+    export DEEPSEEK_API_KEY="sk-deepseek-status-test"
     set_config "kimi_model" "kimi-test-model"
     set_config "kimi_base_url" "https://api.test.kimi.com/"
 
@@ -180,8 +196,10 @@ test_provider_status() {
     assert_contains "$status_output" "Z.AI" "Status should show Z.AI"
     assert_contains "$status_output" "MiniMax" "Status should show MiniMax"
     assert_contains "$status_output" "Kimi" "Status should show Kimi"
+    assert_contains "$status_output" "DeepSeek" "Status should show DeepSeek"
     assert_contains "$status_output" "sk-zai****est" "Status should show masked Z.AI key"
     assert_contains "$status_output" "sk-minim****est" "Status should show masked MiniMax key"
+    assert_contains "$status_output" "sk-deep****est" "Status should show masked DeepSeek key"
 
     # Test status with encryption
     save_secrets
@@ -200,6 +218,7 @@ test_provider_list() {
     # Set up providers
     export ZAI_API_KEY="sk-list-test-zai"
     export MINIMAX_API_KEY="sk-list-test-minimax"
+    export DEEPSEEK_API_KEY="sk-list-test-deepseek"
     set_config "kimi_model" "kimi-list-model"
     set_config "kimi_base_url" "https://api.list.kimi.com/"
     set_config "custom_testprovider_api_key" "sk-custom-list-key"
@@ -213,6 +232,7 @@ test_provider_list() {
     assert_contains "$list_output" "Z.AI" "List should show Z.AI"
     assert_contains "$list_output" "MiniMax" "List should show MiniMax"
     assert_contains "$list_output" "Kimi" "List should show Kimi"
+    assert_contains "$list_output" "DeepSeek" "List should show DeepSeek"
     assert_contains "$list_output" "testprovider" "List should show custom provider"
     assert_contains "$list_output" "sk-li****est" "List should show masked keys"
 
@@ -257,6 +277,10 @@ EOF
     set_config "kimi_base_url" "https://api.test.kimi.com/"
     cmd_test "kimi"
 
+    # Test DeepSeek provider test
+    export DEEPSEEK_API_KEY="sk-test-deepseek-key"
+    cmd_test "deepseek"
+
     # Test Native Anthropic provider test
     cmd_test "anthropic"
 
@@ -292,6 +316,13 @@ test_default_provider() {
 
     default_output=$(cmd_default)
     assert_equals "$default_output" "Current default provider: minimax" "Should show MiniMax as default"
+
+    # Set DeepSeek as default
+    export DEEPSEEK_API_KEY="sk-default-deepseek-key"
+    cmd_default "deepseek"
+
+    default_output=$(cmd_default)
+    assert_equals "$default_output" "Current default provider: deepseek" "Should show DeepSeek as default"
 
     # Test invalid default provider
     assert_command_failure "cmd_default 'invalid-provider'" "Setting invalid provider should fail"
@@ -329,6 +360,10 @@ EOF
     set_config "kimi_model" "kimi-env-model"
     set_config "kimi_base_url" "https://env.kimi.com/api/"
     switch_to_kimi --version
+
+    # Test DeepSeek environment setup
+    export DEEPSEEK_API_KEY="sk-deepseek-env-test"
+    switch_to_deepseek --version
 
     cleanup_test_environment "provider_env_test"
     end_test
