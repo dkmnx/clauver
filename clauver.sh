@@ -47,6 +47,12 @@ declare -A PERFORMANCE_DEFAULTS=(
   ["test_api_timeout_ms"]="3000000"
 )
 
+# Validation constants
+MIN_API_KEY_LENGTH=10
+ANTHROPIC_TEST_TIMEOUT=5
+PROVIDER_TEST_TIMEOUT=10
+DOWNLOAD_TIMEOUT=60
+
 # GitHub API configuration
 GITHUB_API_BASE="https://api.github.com/repos/dkmnx/clauver"
 RAW_CONTENT_BASE="https://raw.githubusercontent.com/dkmnx/clauver"
@@ -100,20 +106,39 @@ BANNER
   printf "%b" "${NC}"
 }
 
+# Background process cleanup
+cleanup_background_processes() {
+  local jobs_list
+  jobs_list=$(jobs -p 2>/dev/null)
+  if [ -n "$jobs_list" ]; then
+    # shellcheck disable=SC2086
+    kill $jobs_list 2>/dev/null || true
+    wait 2>/dev/null || true
+  fi
+}
+
+# Set up cleanup trap for background processes
+trap 'cleanup_background_processes' EXIT
+
+# Show age installation help
+show_age_install_help() {
+  error "age command not found. Please install 'age' package."
+  echo
+  echo "Installation instructions:"
+  echo "  • Debian/Ubuntu: sudo apt install age"
+  echo "  • Fedora/RHEL:   sudo dnf install age"
+  echo "  • Arch Linux:    sudo pacman -S age"
+  echo "  • macOS:         brew install age"
+  echo "  • From source:   https://github.com/FiloSottile/age"
+  return 1
+}
+
 # Ensure age encryption key exists
 ensure_age_key() {
   local current_age_key="${CLAUVER_HOME:-$HOME/.clauver}/age.key"
   if [ ! -f "$current_age_key" ]; then
     if ! command -v age-keygen &>/dev/null; then
-      error "age-keygen command not found. Please install 'age' package."
-      echo
-      echo "Installation instructions:"
-      echo "  • Debian/Ubuntu: sudo apt install age"
-      echo "  • Fedora/RHEL:   sudo dnf install age"
-      echo "  • Arch Linux:    sudo pacman -S age"
-      echo "  • macOS:         brew install age"
-      echo "  • From source:   https://github.com/FiloSottile/age"
-      return 1
+      show_age_install_help
     fi
     log "Generating age encryption key..."
     age-keygen -o "$current_age_key"
@@ -128,15 +153,7 @@ ensure_age_key() {
 save_secrets() {
   # Check if age command is available
   if ! command -v age &>/dev/null; then
-    error "age command not found. Please install 'age' package."
-    echo
-    echo "Installation instructions:"
-    echo "  • Debian/Ubuntu: sudo apt install age"
-    echo "  • Fedora/RHEL:   sudo dnf install age"
-    echo "  • Arch Linux:    sudo pacman -S age"
-    echo "  • macOS:         brew install age"
-    echo "  • From source:   https://github.com/FiloSottile/age"
-    return 1
+    show_age_install_help
   fi
 
   # Check if key file exists
@@ -186,15 +203,7 @@ load_secrets() {
   if [ -f "$SECRETS_AGE" ]; then
     # Check if age command is available
     if ! command -v age &>/dev/null; then
-      error "age command not found. Please install 'age' package."
-      echo
-      echo "Installation instructions:"
-      echo "  • Debian/Ubuntu: sudo apt install age"
-      echo "  • Fedora/RHEL:   sudo dnf install age"
-      echo "  • Arch Linux:    sudo pacman -S age"
-      echo "  • macOS:         brew install age"
-      echo "  • From source:   https://github.com/FiloSottile/age"
-      return 1
+      show_age_install_help
     fi
 
     # Check if key file exists
@@ -213,7 +222,10 @@ load_secrets() {
 
     # Test decryption first to catch corruption early
     local temp_decrypt
-    temp_decrypt=$(mktemp -t clauver_decrypt_XXXXXXXXXX)
+    temp_decrypt=$(mktemp -t clauver_decrypt_XXXXXXXXXX) || {
+      error "Failed to create temporary file for decryption"
+      return 1
+    }
     age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
     local decrypt_pid=$!
     wait "$decrypt_pid"
@@ -241,10 +253,16 @@ load_secrets() {
       return 1
     fi
 
-    # Security: Source decrypted content only after successful validation
-    # This prevents execution of error messages as bash code
-    # shellcheck disable=SC1090
-    source <(echo "$decrypt_test")
+    # Security: Validate decrypted content before sourcing
+    # Only allow safe environment variable assignments
+    if [[ "$decrypt_test" =~ ^[A-Z_][A-Z0-9_]*=[a-zA-Z0-9._-]+[[:space:]]*$ ]]; then
+      # shellcheck disable=SC1090
+      source <(echo "$decrypt_test")
+    else
+      error "Decrypted content contains invalid format or potentially malicious code"
+      rm -f "$temp_decrypt"
+      return 1
+    fi
   elif [ -f "$SECRETS" ]; then
     # Export all variables from secrets.env (backward compatibility)
     # shellcheck disable=SC1090
@@ -440,11 +458,25 @@ get_latest_version() {
   local latest_version=""
   # Run curl in background with timeout for progress indicator
   local temp_output
-  temp_output=$(mktemp -t clauver_version_XXXXXXXXXX)
+  temp_output=$(mktemp -t clauver_version_XXXXXXXXXX) || {
+    error "Failed to create temporary file for version check"
+    return 1
+  }
   curl -s --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
     --max-time "${PERFORMANCE_DEFAULTS[network_max_time]}" \
     "$GITHUB_API_BASE/tags" 2>/dev/null | \
-  python3 -c "import sys, json; data = json.load(sys.stdin); print(data[0]['name'].lstrip('v')) if data else ''" 2>/dev/null > "$temp_output" 2>&1 &
+  python3 -c "
+import sys, json, re
+try:
+    data = json.load(sys.stdin)
+    if data and len(data) > 0:
+        version = data[0].get('name', '')
+        # Sanitize version: only allow v followed by numbers and dots
+        if re.match(r'^v[\d\.]+$', version):
+            print(version.lstrip('v'))
+except (json.JSONDecodeError, IndexError, KeyError):
+    pass
+" 2>/dev/null > "$temp_output" 2>&1 &
   local curl_pid=$!
 
   # Show progress for the network request
@@ -526,15 +558,22 @@ cmd_update() {
   echo "Updating from v${VERSION} to v${latest_version}..."
 
   local temp_file temp_checksum
-  temp_file=$(mktemp)
-  temp_checksum=$(mktemp)
+  temp_file=$(mktemp) || {
+    error "Failed to create temporary file for download"
+    return 1
+  }
+  temp_checksum=$(mktemp) || {
+    error "Failed to create temporary file for checksum"
+    rm -f "$temp_file"
+    return 1
+  }
 
   # Security: Download both script and checksum file
   log "Starting download process..."
 
   # Download main script with progress indicator
   curl -fsSL --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
-    --max-time 60 "$RAW_CONTENT_BASE/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null &
+    --max-time "$DOWNLOAD_TIMEOUT" "$RAW_CONTENT_BASE/v${latest_version}/clauver.sh" -o "$temp_file" 2>/dev/null &
   local download_pid=$!
   show_progress "Downloading clauver.sh v${latest_version}" "$download_pid" 0.2
   wait "$download_pid"
@@ -566,7 +605,7 @@ cmd_update() {
   else
     # Security: Verify downloaded file integrity
     local expected_hash
-    expected_hash=$(cat "$temp_checksum" | awk '{print $1}')
+    expected_hash=$(awk '{print $1}' "$temp_checksum")
 
     if ! verify_sha256 "$temp_file" "$expected_hash"; then
       rm -f "$temp_file" "$temp_checksum"
@@ -1064,8 +1103,8 @@ validate_api_key() {
   fi
 
   # Check minimum length (most API keys are at least 20 chars)
-  if [ ${#key} -lt 10 ]; then
-    error "API key too short (minimum 10 characters)"
+  if [ ${#key} -lt "$MIN_API_KEY_LENGTH" ]; then
+    error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
     return 1
   fi
 
@@ -1197,22 +1236,6 @@ switch_to_anthropic() {
   exec claude "$@"
 }
 
-switch_to_zai() {
-  switch_to_provider "zai" "$@"
-}
-
-switch_to_minimax() {
-  switch_to_provider "minimax" "$@"
-}
-
-switch_to_kimi() {
-  switch_to_provider "kimi" "$@"
-}
-
-switch_to_deepseek() {
-  switch_to_provider "deepseek" "$@"
-}
-
 switch_to_custom() {
   local provider_name="$1"
   shift
@@ -1254,7 +1277,7 @@ cmd_test() {
   case "$provider" in
     anthropic)
       echo -e "${BOLD}Testing Native Anthropic${NC}"
-      if timeout 5 claude --version &>/dev/null; then
+      if timeout "$ANTHROPIC_TEST_TIMEOUT" claude --version &>/dev/null; then
         success "Native Anthropic is working"
       else
         error "Native Anthropic test failed"
@@ -1298,7 +1321,7 @@ cmd_test() {
           export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
           ;;
               esac
-      timeout 10 claude "test" --dangerously-skip-permissions &>/dev/null &
+      timeout "$PROVIDER_TEST_TIMEOUT" claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
       sleep 3
       if kill -0 $test_pid 2>/dev/null; then
@@ -1320,7 +1343,7 @@ cmd_test() {
       base_url="$(get_config "custom_${provider}_base_url")"
       export ANTHROPIC_BASE_URL="$base_url"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
-      timeout 10 claude "test" --dangerously-skip-permissions &>/dev/null &
+      timeout "$PROVIDER_TEST_TIMEOUT" claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
       sleep 3
       if kill -0 $test_pid 2>/dev/null; then
@@ -1674,19 +1697,19 @@ case "${1:-}" in
     ;;
   zai)
     shift
-    switch_to_zai "$@"
+    switch_to_provider "zai" "$@"
     ;;
   minimax)
     shift
-    switch_to_minimax "$@"
+    switch_to_provider "minimax" "$@"
     ;;
   kimi)
     shift
-    switch_to_kimi "$@"
+    switch_to_provider "kimi" "$@"
     ;;
   deepseek)
     shift
-    switch_to_deepseek "$@"
+    switch_to_provider "deepseek" "$@"
     ;;
     "")
     # Check if a default provider is set
@@ -1698,16 +1721,16 @@ case "${1:-}" in
           switch_to_anthropic "$@"
           ;;
         zai)
-          switch_to_zai "$@"
+          switch_to_provider "zai" "$@"
           ;;
         minimax)
-          switch_to_minimax "$@"
+          switch_to_provider "minimax" "$@"
           ;;
         kimi)
-          switch_to_kimi "$@"
+          switch_to_provider "kimi" "$@"
           ;;
         deepseek)
-          switch_to_deepseek "$@"
+          switch_to_provider "deepseek" "$@"
           ;;
                 *)
           # It's a custom provider
@@ -1735,16 +1758,16 @@ case "${1:-}" in
             switch_to_anthropic "$@"
             ;;
           zai)
-            switch_to_zai "$@"
+            switch_to_provider "zai" "$@"
             ;;
           minimax)
-            switch_to_minimax "$@"
+            switch_to_provider "minimax" "$@"
             ;;
           kimi)
-            switch_to_kimi "$@"
+            switch_to_provider "kimi" "$@"
             ;;
           deepseek)
-            switch_to_deepseek "$@"
+            switch_to_provider "deepseek" "$@"
             ;;
                     *)
             # It's a custom provider
