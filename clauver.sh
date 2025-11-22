@@ -750,11 +750,7 @@ config_standard_provider() {
   set_secret "$key_name" "$key"
 
   # Provider-specific configuration
-  case "$provider" in
-    "kimi")
-      config_kimi_settings
-      ;;
-  esac
+  config_provider_settings "$provider"
 
   success "${provider^^} configured. Use: clauver $provider"
 
@@ -793,6 +789,65 @@ config_kimi_settings() {
   fi
 
   [ -n "$url" ] && set_config "kimi_base_url" "$url"
+}
+
+config_provider_settings() {
+  local provider="$1"
+  local requirements="${PROVIDER_REQUIRES[$provider]:-api_key}"
+
+  # Skip if only API key is required (handled by main config flow)
+  if [ "$requirements" = "api_key" ]; then
+    return 0
+  fi
+
+  echo
+  echo -e "${BOLD}${provider^^} Configuration${NC}"
+
+  IFS=',' read -ra required_fields <<< "$requirements"
+
+  for field in "${required_fields[@]}"; do
+    case "$field" in
+      "model")
+        local current_model
+        current_model="$(get_config "${provider}_model")"
+        [ -n "$current_model" ] && echo "Current model: $current_model"
+        read -r -p "Model (default: ${PROVIDER_DEFAULTS[${provider}_default_model]}): " model
+        model="${model:-${PROVIDER_DEFAULTS[${provider}_default_model]}}"
+
+        # Validate model name
+        if [ -n "$model" ] && ! validate_model_name "$model"; then
+          return 1
+        fi
+
+        [ -n "$model" ] && set_config "${provider}_model" "$model"
+        ;;
+
+      "url")
+        local current_url
+        current_url="$(get_config "${provider}_base_url")"
+        [ -n "$current_url" ] && echo "Current base URL: $current_url"
+        read -r -p "Base URL (default: ${PROVIDER_DEFAULTS[${provider}_base_url]}): " url
+        url="${url:-${PROVIDER_DEFAULTS[${provider}_base_url]}}"
+
+        # Validate URL
+        if [ -n "$url" ] && ! validate_url "$url"; then
+          return 1
+        fi
+
+        [ -n "$url" ] && set_config "${provider}_base_url" "$url"
+        ;;
+
+      # api_key is handled by main config flow, skip here
+      "api_key")
+        continue
+        ;;
+
+      *)
+        error "Unknown configuration field: $field"
+        return 1
+        ;;
+    esac
+  done
 }
 
 config_custom_provider() {
@@ -868,9 +923,9 @@ declare -A PROVIDER_CONFIGS=(
 
 # Provider configuration metadata
 declare -A PROVIDER_REQUIRES=(
-  ["zai"]="api_key"
-  ["minimax"]="api_key"
-  ["deepseek"]="api_key"
+  ["zai"]="api_key,model,url"
+  ["minimax"]="api_key,model,url"
+  ["deepseek"]="api_key,model,url"
   ["kimi"]="api_key,model,url"
 )
 
