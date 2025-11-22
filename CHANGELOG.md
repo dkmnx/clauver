@@ -5,6 +5,26 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.2] - 2025-11-22
+
+### Fixed
+
+- **Configuration cache reload** - resolved provider model configuration not taking effect immediately after changes
+- **Provider banner display** - fixed model information not showing correctly in provider switching banners
+
+### Refactored
+
+- **Streamlined provider configuration system** - replaced hardcoded provider-specific configuration with
+  dynamic generic function
+- **Enhanced extensibility** - enabled easier addition of new providers through configuration metadata system
+- **Reduced code duplication** - consolidated provider configuration logic into reusable components
+
+### Improved
+
+- **Dynamic model configuration** - ZAI, MiniMax, DeepSeek, and Kimi providers now support configurable models
+- **Configuration cache management** - improved cache invalidation and reload logic for real-time configuration updates
+- **Provider switching UX** - enhanced provider banners to display current model information
+
 ## [1.9.1] - 2025-11-22
 
 ### Fixed
