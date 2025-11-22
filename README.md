@@ -355,7 +355,8 @@ _Clauver_ uses an encrypted configuration system:
   - `MINIMAX_API_KEY`
   - `KIMI_API_KEY`
   - `DEEPSEEK_API_KEY`
-    - Secrets are only decrypted into memory, never written to disk as plaintext
+
+> _Secrets are only decrypted into memory, never written to disk as plaintext_
 
 - **age.key**: Your encryption key (automatically generated)
   - **CRITICAL**: Back up this file! Without it, you cannot decrypt your secrets
