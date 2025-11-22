@@ -299,6 +299,10 @@ create_github_release() {
     fi
 
     # Change to dist directory for artifact uploads
+    if [[ ! -d "dist" ]]; then
+        error "dist directory not found. Run generate_checksums() first to create release artifacts."
+        exit 1
+    fi
     cd dist
 
     # Create release with artifacts
