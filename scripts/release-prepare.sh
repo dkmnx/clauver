@@ -20,38 +20,35 @@ PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 DRY_RUN=false
 SKIP_TESTS=false
 CREATE_GH_RELEASE=false
+SHA256_MODE="full"
 
 show_help() {
     cat << EOF
-Usage: $(basename "$0") <version> [options]
+Usage: $(basename "$0") [version] [options]
 
 Arguments:
     version    Version to prepare (e.g., v1.9.2)
+              Optional when using --sha256-minimal (auto-detects latest)
 
 Options:
-    --dry-run     Show what would be done without executing
-    --no-tests    Skip running tests (for CI environments)
-    --gh-release  Create GitHub release and upload artifacts
-    --help        Show this help message
+    --dry-run         Show what would be done without executing
+    --no-tests        Skip running tests (for CI environments)
+    --gh-release      Create GitHub release and upload artifacts
+    --sha256-minimal  Generate only clauver.sh.sha256 (default: full)
+    --help            Show this help message
 
 Examples:
-    $(basename "$0") v1.9.2
-    $(basename "$0") v1.9.2 --dry-run
-    $(basename "$0") v1.9.2 --no-tests
-    $(basename "$0") v1.9.2 --gh-release
-    $(basename "$0") v1.9.2 --dry-run --gh-release
+    ./scripts/release-prepare.sh v1.9.2
+    ./scripts/release-prepare.sh v1.9.2 --dry-run
+    ./scripts/release-prepare.sh v1.9.2 --no-tests
+    ./scripts/release-prepare.sh v1.9.2 --gh-release
+    ./scripts/release-prepare.sh --sha256-minimal           # Auto-detects version
+    ./scripts/release-prepare.sh --sha256-minimal --dry-run   # Auto-detects version
 EOF
 }
 
 # Parse command line arguments
 parse_args() {
-    # Check for help flag first
-    if [[ $# -eq 0 ]]; then
-        error "Version argument is required"
-        show_help
-        exit 1
-    fi
-
     # Handle help flag regardless of position
     for arg in "$@"; do
         if [[ "$arg" == "--help" ]]; then
@@ -60,9 +57,45 @@ parse_args() {
         fi
     done
 
-    VERSION="$1"
-    shift
+    # Parse options first to determine if --sha256-minimal is present
+    local args=("$@")
+    local version_provided=false
+    local sha256_minimal=false
 
+    # First pass: check for options and version presence
+    for arg in "${args[@]}"; do
+        case $arg in
+            --sha256-minimal)
+                sha256_minimal=true
+                ;;
+            -*)
+                # Skip other options for now
+                ;;
+            *)
+                if [[ "$version_provided" == "false" ]]; then
+                    VERSION="$arg"
+                    version_provided=true
+                fi
+                ;;
+        esac
+    done
+
+    # Handle version requirement
+    if [[ "$version_provided" == "false" ]]; then
+        if [[ "$sha256_minimal" == "true" ]]; then
+            # Auto-detect version for minimal mode
+            if ! VERSION=$(auto_detect_latest_version); then
+                exit 1
+            fi
+            log "Using auto-detected version: $VERSION"
+        else
+            error "Version argument is required"
+            show_help
+            exit 1
+        fi
+    fi
+
+    # Second pass: process all options
     while [[ $# -gt 0 ]]; do
         case $1 in
             --dry-run)
@@ -77,13 +110,60 @@ parse_args() {
                 CREATE_GH_RELEASE=true
                 shift
                 ;;
-            *)
+            --sha256-minimal)
+                SHA256_MODE="minimal"
+                shift
+                ;;
+            --)
+                # End of options
+                shift
+                break
+                ;;
+            -*)
                 error "Unknown option: $1"
                 show_help
                 exit 1
                 ;;
+            *)
+                # Skip version argument (already processed)
+                shift
+                ;;
         esac
     done
+}
+
+# Auto-detect latest version from git or changelog
+auto_detect_latest_version() {
+    local changelog_file="$PROJECT_ROOT/CHANGELOG.md"
+
+    log "Auto-detecting latest version..." >&2
+
+    # Try to get latest version from changelog first
+    if [[ -f "$changelog_file" ]]; then
+        local changelog_version
+        changelog_version=$(grep '## \[' "$changelog_file" | head -1 | sed 's/.*## \[\([^]]*\)\].*/\1/')
+
+        if [[ -n "$changelog_version" ]]; then
+            # Add 'v' prefix if not present
+            [[ "$changelog_version" =~ ^v ]] || changelog_version="v$changelog_version"
+            echo "$changelog_version"
+            success "Auto-detected version from changelog: $changelog_version" >&2
+            return 0
+        fi
+    fi
+
+    # Fallback to git tags
+    local git_version
+    git_version=$(git tag --sort=-version:refname | head -1)
+
+    if [[ -n "$git_version" ]]; then
+        success "Auto-detected version from git tags: $git_version" >&2
+        echo "$git_version"
+        return 0
+    fi
+
+    error "Could not auto-detect version. No changelog entry found and no git tags available." >&2
+    return 1
 }
 
 # Validate version format
@@ -100,6 +180,138 @@ validate_version() {
     log "Version format is valid: $version"
 }
 
+# Validate tag consistency with git and changelog
+validate_tag_consistency() {
+    local version="$1"
+    local changelog_file="$PROJECT_ROOT/CHANGELOG.md"
+
+    log "Validating tag consistency for $version..."
+
+    # Check if tag exists in git
+    if ! git rev-parse "$version" >/dev/null 2>&1; then
+        error "Tag $version does not exist in git repository"
+        error ""
+        error "Available tags (latest first):"
+        git tag --sort=-version:refname | head -5 | sed 's/^/  - /'
+        error ""
+        error "Please check the latest release tag and try again."
+        error "You can also create a new release by:"
+        error "  1. Running: git tag $version"
+        error "  2. Running: git push --tags"
+        exit 1
+    fi
+
+    # Get latest tag from git
+    local latest_git_tag
+    latest_git_tag=$(git tag --sort=-version:refname | head -1)
+
+    if [[ "$version" != "$latest_git_tag" ]]; then
+        error "Tag $version is not the latest tag"
+        error "Latest tag: $latest_git_tag"
+        error "Specified tag: $version"
+        error ""
+        error "Please use the latest tag or create a newer one."
+        exit 1
+    fi
+
+    # Check if version exists in changelog
+    if [[ ! -f "$changelog_file" ]]; then
+        error "CHANGELOG.md not found at $changelog_file"
+        error "Please ensure the changelog exists and is up to date."
+        exit 1
+    fi
+
+    local changelog_version
+    changelog_version=$(grep '## \[' "$changelog_file" | head -1 | sed 's/.*## \[\([^]]*\)\].*/\1/')
+
+    if [[ -z "$changelog_version" ]]; then
+        error "No version entries found in CHANGELOG.md"
+        error "Please ensure the changelog has proper version entries."
+        exit 1
+    fi
+
+    # Remove 'v' prefix from changelog version for comparison if it exists
+    changelog_version=${changelog_version#v}
+    local version_no_prefix
+    version_no_prefix=${version#v}
+
+    if [[ "$version_no_prefix" != "$changelog_version" ]]; then
+        error "Version mismatch between tag and changelog"
+        error "Tag version: $version"
+        error "Changelog version: v$changelog_version"
+        error ""
+        error "Please ensure the CHANGELOG.md has an entry for version $version"
+        error "Update the changelog to match the tag, or use the correct tag."
+        exit 1
+    fi
+
+    success "Tag validation passed: $version exists and is the latest"
+    success "Changelog consistency verified: v$changelog_version"
+}
+
+# Check if working directory has changes that affect release
+check_working_directory_changes() {
+    local changes
+    changes=$(git status --porcelain)
+
+    if [[ -z "$changes" ]]; then
+        log "Working directory is clean"
+        return 0
+    fi
+
+    # Define files that are critical for release and must be clean
+    local critical_files=(
+        "clauver.sh"
+        "CHANGELOG.md"
+        "scripts/"
+        "tests/"
+        "README.md"
+        "install.sh"
+    )
+
+    local has_critical_changes=false
+    local has_other_changes=false
+    local critical_changes_list=""
+    local other_changes_list=""
+
+    # Process each changed file
+    while IFS= read -r line; do
+        local file_status="${line:0:2}"
+        local file_path="${line:3}"
+
+        local is_critical=false
+        for critical_file in "${critical_files[@]}"; do
+            if [[ "$file_path" == "$critical_file" || "$file_path" == "$critical_file"/* ]]; then
+                is_critical=true
+                break
+            fi
+        done
+
+        if [[ "$is_critical" == "true" ]]; then
+            has_critical_changes=true
+            critical_changes_list="${critical_changes_list}\n  ${line}"
+        else
+            has_other_changes=true
+            other_changes_list="${other_changes_list}\n  ${line}"
+        fi
+    done <<< "$changes"
+
+    if [[ "$has_critical_changes" == "true" ]]; then
+        error "Critical changes detected that could affect release"
+        error "Please commit or stash these changes before proceeding:"
+        echo -e "$critical_changes_list"
+        error ""
+        exit 1
+    fi
+
+    if [[ "$has_other_changes" == "true" ]]; then
+        warn "Working directory has changes not related to clauver.sh:"
+        echo -e "$other_changes_list"
+        warn "These changes will be ignored for release preparation"
+        warn "Consider committing them before creating the final release"
+    fi
+}
+
 # Check git repository state
 check_git_state() {
     log "Checking git repository state..."
@@ -110,23 +322,11 @@ check_git_state() {
         exit 1
     fi
 
-    # Check if working directory is clean
-    if [[ -n $(git status --porcelain) ]]; then
-        error "Working directory is not clean"
-        git status --short
-        error "Please commit or stash changes before proceeding"
-        exit 1
-    fi
+    # Check if working directory has changes that affect release
+    check_working_directory_changes
 
-    # Check if tag exists (for existing releases)
-    if git rev-parse "$VERSION" >/dev/null 2>&1; then
-        warn "Tag $VERSION already exists"
-        read -r -p "Continue anyway? [y/N]: " confirm
-        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-            log "Aborted by user"
-            exit 0
-        fi
-    fi
+    # Validate tag exists and is the latest
+    validate_tag_consistency "$VERSION"
 
     log "Git repository state is valid"
 }
@@ -162,19 +362,23 @@ check_dependencies() {
 generate_checksums() {
     local version="$1"
 
-    log "Generating SHA256 checksums for $version..."
+    log "Generating SHA256 checksums for $version (mode: $SHA256_MODE)..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        log "[DRY RUN] Would generate clauver.sh.sha256"
-        log "[DRY RUN] Would create source archives"
-        log "[DRY RUN] Would generate individual .sha256 files for each artifact"
+        if [[ "$SHA256_MODE" == "minimal" ]]; then
+            log "[DRY RUN] Would generate clauver.sh.sha256 only"
+        else
+            log "[DRY RUN] Would generate clauver.sh.sha256"
+            log "[DRY RUN] Would create source archives"
+            log "[DRY RUN] Would generate individual .sha256 files for each artifact"
+        fi
         return 0
     fi
 
     # Change to project root
     cd "$PROJECT_ROOT"
 
-    # Generate checksum for main script
+    # Generate checksum for main script (always needed)
     if [[ -f "clauver.sh" ]]; then
         sha256sum clauver.sh > clauver.sh.sha256
         success "Generated clauver.sh.sha256"
@@ -190,6 +394,16 @@ generate_checksums() {
         error "clauver.sh not found"
         exit 1
     fi
+
+    # Minimal mode: only generate clauver.sh.sha256
+    if [[ "$SHA256_MODE" == "minimal" ]]; then
+        success "Minimal SHA256 generation completed"
+        log "Generated: clauver.sh.sha256"
+        return 0
+    fi
+
+    # Full mode: generate all SHA256 files
+    log "Full SHA256 generation mode enabled"
 
     # Create release directory and archives
     mkdir -p dist
@@ -266,6 +480,98 @@ verify_checksums() {
     fi
 }
 
+# Generate release notes from changelog
+generate_release_notes() {
+    local version="$1"
+    local changelog_file="$PROJECT_ROOT/CHANGELOG.md"
+    local repo_url
+    repo_url=$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')
+
+    # Extract changelog content for this version
+    local changelog_content
+    changelog_content=$(extract_changelog_for_version "$version" "$changelog_file")
+
+    if [[ -z "$changelog_content" ]]; then
+        warn "No changelog entry found for $version, using generic release notes"
+        changelog_content="## Changes
+- Release preparation and validation"
+    fi
+
+    # Generate complete release notes
+    local release_notes
+    release_notes="Release $version of Clauver
+
+$changelog_content
+
+## Artifacts
+- \`clauver-${version}.tar.gz\`: Source archive (tar.gz)
+- \`clauver-${version}.zip\`: Source archive (zip)
+- \`clauver.sh\`: Main script
+- \`SHA256SUMS\`: Comprehensive checksums file
+- Individual \`.sha256\` files for each artifact
+
+## Installation
+
+### Quick Install
+\`\`\`bash
+curl -fsSL https://raw.githubusercontent.com/${repo_url}/main/install.sh | bash
+\`\`\`
+
+### Manual Installation
+\`\`\`bash
+# Clone the repository
+git clone https://github.com/${repo_url} clauver
+cd clauver
+
+# Install
+mkdir -p ~/.clauver/bin
+cp clauver.sh ~/.clauver/bin/clauver
+chmod +x ~/.clauver/bin/clauver
+
+# Add to PATH
+echo \"export PATH=\\\"\$HOME/.clauver/bin:\$PATH\\\"\" >> ~/.bashrc
+source ~/.bashrc
+\`\`\`
+
+## Verification
+\`\`\`bash
+# Verify SHA256 checksums
+sha256sum -c SHA256SUMS
+\`\`\`"
+
+    echo "$release_notes"
+}
+
+# Extract changelog content for specific version
+extract_changelog_for_version() {
+    local version="$1"
+    local changelog_file="$2"
+    local version_no_prefix=${version#v}
+
+    # Use awk to extract content between version headers
+    awk -v target="$version_no_prefix" '
+    /^## \[/ {
+        # Extract version from current line
+        current_version = $0
+        gsub(/.*## \[|].*/, "", current_version)
+        gsub(/^v/, "", current_version)
+
+        if (current_version == target) {
+            in_target = 1
+            print $0
+            next
+        } else if (in_target) {
+            # We have reached the next version section
+            exit
+        }
+    }
+
+    in_target && NF {
+        print $0
+    }
+    ' "$changelog_file"
+}
+
 # Create GitHub release and upload artifacts
 create_github_release() {
     local version="$1"
@@ -319,38 +625,14 @@ create_github_release() {
 
     log "Uploading artifacts to GitHub release $version..."
 
+    # Generate release notes from changelog
+    local release_notes
+    release_notes=$(generate_release_notes "$version")
+
     # Create release and upload artifacts
     gh release create "$version" \
-        --title "Clauver $version" \
-        --notes "Release $version of Clauver
-
-## Changes
-- Add SHA256 checksums for all release artifacts
-- Enhanced release preparation automation
-
-## Artifacts
-- \`clauver-${version}.tar.gz\`: Source archive (tar.gz)
-- \`clauver-${version}.zip\`: Source archive (zip)
-- \`clauver.sh\`: Main script
-- \`SHA256SUMS\`: Comprehensive checksums file
-- Individual \`.sha256\` files for each artifact
-
-## Installation
-\`\`\`bash
-# Install using curl
-curl -fsSL https://raw.githubusercontent.com/$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')/main/clauver.sh | bash
-
-# Or download the script directly
-wget https://github.com/$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')/releases/download/${version}/clauver.sh
-chmod +x clauver.sh
-\`\`\`
-
-## Verification
-\`\`\`bash
-# Verify SHA256 checksums
-sha256sum -c SHA256SUMS
-\`\`\`
-" \
+        --title "clauver $version" \
+        --notes "$release_notes" \
         "${artifacts[@]}"
 
     cd ..
@@ -380,6 +662,44 @@ run_tests() {
     else
         warn "Release tests not found at tests/test_release.sh"
         warn "Skipping release testing"
+    fi
+}
+
+# Get latest changelog entry for commit message
+get_latest_changelog_entry() {
+    local changelog_file="$PROJECT_ROOT/CHANGELOG.md"
+
+    if [[ ! -f "$changelog_file" ]]; then
+        echo "chore: add SHA256 checksums"
+        return
+    fi
+
+    # Extract version from first version entry
+    local version_line
+    version_line=$(grep '## \[' "$changelog_file" | head -1)
+
+    if [[ -z "$version_line" ]]; then
+        echo "chore: add SHA256 checksums"
+        return
+    fi
+
+    # Extract version number using cut
+    local version
+    version=$(echo "$version_line" | cut -d'[' -f2 | cut -d']' -f1)
+
+    if [[ -z "$version" ]]; then
+        echo "chore: add SHA256 checksums"
+        return
+    fi
+
+    # Get first added feature for context (simple approach)
+    local feature
+    feature=$(awk '/^### Added/{found=1; next} found && /^### [A-Za-z]/{exit} found && /^- \*\*/{gsub(/^- \*\*[^*]*\*\* */, ""); gsub(/^- /, ""); print; exit}' "$changelog_file")
+
+    if [[ -n "$feature" ]]; then
+        echo "chore: release $version - $feature"
+    else
+        echo "chore: release $version"
     fi
 }
 
@@ -424,7 +744,9 @@ show_instructions() {
         echo "3. Commit with conventional commit:"
     fi
 
-    echo "   git commit -m \"chore: add SHA256 checksums for $version\""
+    local commit_message
+    commit_message=$(get_latest_changelog_entry)
+    echo "   git commit -m \"$commit_message\""
     echo
 
     if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
