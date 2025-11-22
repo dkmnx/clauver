@@ -499,8 +499,7 @@ generate_release_notes() {
 
     # Generate complete release notes
     local release_notes
-    release_notes="Release $version of Clauver
-
+    release_notes="
 $changelog_content
 
 ## Artifacts
@@ -631,7 +630,7 @@ create_github_release() {
 
     # Create release and upload artifacts
     gh release create "$version" \
-        --title "clauver $version" \
+        --title "$version" \
         --notes "$release_notes" \
         "${artifacts[@]}"
 
