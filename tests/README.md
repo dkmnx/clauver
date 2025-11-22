@@ -168,12 +168,14 @@ make check_deps
 ```
 
 **Required Dependencies:**
+
 - `age` - Encryption tool for secret management
 - `shellcheck` - Shell script linting and analysis
 - `bc` - Calculator for performance tests
 - `curl` - HTTP client for API testing
 
 **Optional Dependencies:**
+
 - `claude` - Claude CLI (for integration tests)
 
 ## Test Configuration
