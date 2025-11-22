@@ -19,6 +19,7 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
 DRY_RUN=false
 SKIP_TESTS=false
+CREATE_GH_RELEASE=false
 
 show_help() {
     cat << EOF
@@ -30,12 +31,15 @@ Arguments:
 Options:
     --dry-run     Show what would be done without executing
     --no-tests    Skip running tests (for CI environments)
+    --gh-release  Create GitHub release and upload artifacts
     --help        Show this help message
 
 Examples:
     $(basename "$0") v1.9.2
     $(basename "$0") v1.9.2 --dry-run
     $(basename "$0") v1.9.2 --no-tests
+    $(basename "$0") v1.9.2 --gh-release
+    $(basename "$0") v1.9.2 --dry-run --gh-release
 EOF
 }
 
@@ -67,6 +71,10 @@ parse_args() {
                 ;;
             --no-tests)
                 SKIP_TESTS=true
+                shift
+                ;;
+            --gh-release)
+                CREATE_GH_RELEASE=true
                 shift
                 ;;
             *)
@@ -135,6 +143,10 @@ check_dependencies() {
 
     if ! command -v git >/dev/null 2>&1; then
         missing_deps+=("git")
+    fi
+
+    if ! command -v gh >/dev/null 2>&1; then
+        missing_deps+=("gh")
     fi
 
     if [[ ${#missing_deps[@]} -gt 0 ]]; then
@@ -254,6 +266,93 @@ verify_checksums() {
     fi
 }
 
+# Create GitHub release and upload artifacts
+create_github_release() {
+    local version="$1"
+
+    log "Creating GitHub release for $version..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would create GitHub release $version"
+        log "[DRY RUN] Would upload artifacts to GitHub release"
+        return 0
+    fi
+
+    # Check if gh is authenticated
+    if ! gh auth status >/dev/null 2>&1; then
+        warn "GitHub CLI not authenticated. Skipping GitHub release creation."
+        warn "Run 'gh auth login' to authenticate and enable GitHub releases."
+        return 0
+    fi
+
+    # Check if release already exists
+    if gh release view "$version" >/dev/null 2>&1; then
+        warn "GitHub release $version already exists"
+        read -r -p "Overwrite existing release? [y/N]: " confirm
+        if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+            log "Skipping GitHub release creation"
+            return 0
+        fi
+        # Delete existing release
+        gh release delete "$version" --yes
+        log "Deleted existing GitHub release $version"
+    fi
+
+    # Change to dist directory for artifact uploads
+    cd dist
+
+    # Create release with artifacts
+    local artifacts=(
+        "clauver-${version}.tar.gz"
+        "clauver-${version}.tar.gz.sha256"
+        "clauver-${version}.zip"
+        "clauver-${version}.zip.sha256"
+        "clauver.sh"
+        "clauver.sh.sha256"
+        "SHA256SUMS"
+    )
+
+    log "Uploading artifacts to GitHub release $version..."
+
+    # Create release and upload artifacts
+    gh release create "$version" \
+        --title "Clauver $version" \
+        --notes "Release $version of Clauver
+
+## Changes
+- Add SHA256 checksums for all release artifacts
+- Enhanced release preparation automation
+
+## Artifacts
+- \`clauver-${version}.tar.gz\`: Source archive (tar.gz)
+- \`clauver-${version}.zip\`: Source archive (zip)
+- \`clauver.sh\`: Main script
+- \`SHA256SUMS\`: Comprehensive checksums file
+- Individual \`.sha256\` files for each artifact
+
+## Installation
+\`\`\`bash
+# Install using curl
+curl -fsSL https://raw.githubusercontent.com/$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')/main/clauver.sh | bash
+
+# Or download the script directly
+wget https://github.com/$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')/releases/download/${version}/clauver.sh
+chmod +x clauver.sh
+\`\`\`
+
+## Verification
+\`\`\`bash
+# Verify SHA256 checksums
+sha256sum -c SHA256SUMS
+\`\`\`
+" \
+        "${artifacts[@]}"
+
+    cd ..
+
+    success "GitHub release $version created with artifacts"
+}
+
 # Run release tests
 run_tests() {
     if [[ "$SKIP_TESTS" == "true" ]]; then
@@ -324,6 +423,12 @@ main() {
     generate_checksums "$VERSION"
     verify_checksums "$VERSION"
     run_tests
+
+    # Create GitHub release if requested
+    if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
+        create_github_release "$VERSION"
+    fi
+
     show_instructions "$VERSION"
 
     if [[ "$DRY_RUN" == "true" ]]; then
