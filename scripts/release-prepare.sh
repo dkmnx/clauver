@@ -268,7 +268,7 @@ run_tests() {
 show_instructions() {
     local version="$1"
 
-    log "Release preparation complete for v$version!"
+    log "Release preparation complete for $version!"
     echo
 
     if [[ "$DRY_RUN" == "true" ]]; then
