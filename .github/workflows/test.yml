@@ -265,7 +265,7 @@ jobs:
         fi
 
     - name: Upload SHA256 artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: sha256-checksums-v${{ env.VERSION }}
         path: |
