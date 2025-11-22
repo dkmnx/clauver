@@ -390,6 +390,7 @@ show_instructions() {
         echo "No files were modified. To actually prepare the release, run:"
         echo
         echo "  ./scripts/release-prepare.sh $version"
+        echo "  ./scripts/release-prepare.sh $version --gh-release  # with GitHub release"
         echo
         return 0
     fi
@@ -399,18 +400,59 @@ show_instructions() {
     echo "   cat clauver.sh.sha256"
     echo "   cat dist/SHA256SUMS"
     echo
-    echo "2. Add the SHA256 files to git:"
+
+    if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
+        echo "2. GitHub release already created with artifacts!"
+        echo "   View release at: https://github.com/$(gh repo view --json owner,name --template '{{.owner.login}}/{{.name}}')/releases/tag/$version"
+        echo
+        echo "3. Add the SHA256 files to git:"
+    else
+        echo "2. Add the SHA256 files to git:"
+    fi
+
     echo "   git add clauver.sh.sha256 dist/SHA256SUMS dist/clauver-${version}.* dist/*.sha256"
     echo
-    echo "3. Commit with conventional commit:"
+
+    if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
+        echo "4. Commit with conventional commit:"
+    else
+        echo "3. Commit with conventional commit:"
+    fi
+
     echo "   git commit -m \"chore: add SHA256 checksums for $version\""
     echo
-    echo "4. Push the commit and tag:"
+
+    if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
+        echo "5. Push the commit and tag:"
+    else
+        echo "4. Push the commit and tag:"
+    fi
+
     echo "   git push"
     echo "   git push --tags"
     echo
-    echo "5. Monitor CI for SHA256 validation"
-    echo
+
+    if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
+        echo "6. Monitor CI for SHA256 validation"
+        echo
+        echo "=== GitHub Release Information ==="
+        echo "✅ GitHub release created with artifacts"
+        echo "📦 Artifacts uploaded:"
+        echo "   - clauver-${version}.tar.gz"
+        echo "   - clauver-${version}.zip"
+        echo "   - clauver.sh"
+        echo "   - All SHA256 checksum files"
+        echo
+    else
+        echo "5. Monitor CI for SHA256 validation"
+        echo
+        echo "=== GitHub Release (Optional) ==="
+        echo "To create a GitHub release with artifacts:"
+        echo "./scripts/release-prepare.sh $version --gh-release"
+        echo "# Or create manually:"
+        echo "gh release create $version --title \"Clauver $version\" --generate-notes dist/*"
+        echo
+    fi
 }
 
 # Main execution
