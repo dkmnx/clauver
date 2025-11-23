@@ -28,7 +28,11 @@ test_crypto_module_functions() {
     if command -v age &>/dev/null; then
         crypto_ensure_key
         # AGE_KEY should be defined by now
-        [ -n "$AGE_KEY" ] && [ -f "$AGE_KEY" ] && local key_exists="true" || local key_exists="false"
+        if [ -n "$AGE_KEY" ] && [ -f "$AGE_KEY" ]; then
+            local key_exists="true"
+        else
+            local key_exists="false"
+        fi
         assert_equals "$key_exists" "true" "crypto_ensure_key should create age.key file"
 
         # Check permissions if file exists
