@@ -67,6 +67,19 @@ NC=$'\033[0m'
 log() { printf "${BLUE}→${NC} %s\n" "$*"; }
 success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
 warn() { printf "${YELLOW}!${NC} %s\n" "$*"; }
+
+# Sanitize paths in error messages to prevent information disclosure
+sanitize_path() {
+  local path="$1"
+  # Show only filename and directory, hide full path for security
+  if [[ -n "$HOME" && "$path" == "$HOME"* ]]; then
+    echo "~${path#$HOME}"
+  elif [[ "$path" == */* ]]; then
+    echo ".../$(basename "$path")"
+  else
+    echo "$path"
+  fi
+}
 error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
 
 # Progress indicator for long-running operations
@@ -109,16 +122,30 @@ BANNER
 # Background process cleanup
 cleanup_background_processes() {
   local jobs_list
+  local job_pid
+
+  # Get list of background job PIDs safely
   jobs_list=$(jobs -p 2>/dev/null)
+
   if [ -n "$jobs_list" ]; then
-    # shellcheck disable=SC2086
-    kill $jobs_list 2>/dev/null || true
+    # Process each PID individually to prevent injection
+    while IFS= read -r job_pid; do
+      # Validate PID is numeric and reasonable
+      if [[ "$job_pid" =~ ^[0-9]+$ ]] && [ "$job_pid" -gt 1 ] && [ "$job_pid" -lt 32768 ]; then
+        # Verify it's actually a background job we own
+        if kill -0 "$job_pid" 2>/dev/null; then
+          kill "$job_pid" 2>/dev/null || true
+        fi
+      fi
+    done <<< "$jobs_list"
+
+    # Wait for all background jobs to finish
     wait 2>/dev/null || true
   fi
 }
 
-# Set up cleanup trap for background processes
-trap 'cleanup_background_processes' EXIT
+# Set up cleanup trap for background processes with signal handling
+trap 'cleanup_background_processes; exit 0' EXIT INT TERM
 
 # Show age installation help
 show_age_install_help() {
@@ -133,6 +160,26 @@ show_age_install_help() {
   return 1
 }
 
+# Create secure temporary file with proper permissions
+create_secure_temp_file() {
+  local prefix="$1"
+  local temp_file
+
+  temp_file=$(mktemp -t "${prefix}_XXXXXXXXXX") || {
+    error "Failed to create temporary file for $prefix"
+    return 1
+  }
+
+  # Ensure secure permissions
+  chmod 600 "$temp_file" || {
+    error "Failed to set secure permissions on temp file"
+    rm -f "$temp_file"
+    return 1
+  }
+
+  echo "$temp_file"
+}
+
 # Ensure age encryption key exists
 ensure_age_key() {
   local current_age_key="${CLAUVER_HOME:-$HOME/.clauver}/age.key"
@@ -143,7 +190,7 @@ ensure_age_key() {
     log "Generating age encryption key..."
     age-keygen -o "$current_age_key"
     chmod 600 "$current_age_key"
-    success "Age encryption key generated at $current_age_key"
+    success "Age encryption key generated at $(sanitize_path "$current_age_key")"
     echo
     warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
   fi
@@ -158,10 +205,10 @@ save_secrets() {
 
   # Check if key file exists
   if [ ! -f "$AGE_KEY" ]; then
-    error "Age key not found at: $AGE_KEY"
+    error "Age key not found at: $(sanitize_path "$AGE_KEY")"
     echo
     echo "Your encryption key is missing. To recover:"
-    echo "  1. If you have a backup of your key, restore it to: $AGE_KEY"
+    echo "  1. If you have a backup of your key, restore it to: $(sanitize_path "$AGE_KEY")"
     echo "  2. Otherwise, reconfigure your providers: clauver config <provider>"
     echo "  3. The key will be regenerated automatically"
     return 1
@@ -195,6 +242,49 @@ save_secrets() {
   chmod 600 "$SECRETS_AGE"
 }
 
+# Load decrypted content safely without using source
+load_decrypted_content_safely() {
+  local content="$1"
+  local old_ifs="$IFS"
+
+  # Process line by line safely
+  IFS=$'\n'
+  for line in $content; do
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Validate environment variable assignment format
+    if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=(.*)$ ]]; then
+      local var_name="${BASH_REMATCH[1]}"
+      local var_value="${BASH_REMATCH[2]}"
+
+      # Additional safety check on variable name
+      case "$var_name" in
+        *PATH*|*HOME*|*USER*|*SHELL*|*ENV*)
+          warn "Loading system-like variable: $var_name"
+          ;;
+      esac
+
+      # Security check: reject dangerous patterns in values
+      if [[ "$var_value" =~ \$\(.*\) ]] || \
+         [[ "$var_value" =~ \`.*\` ]] || \
+         [[ "$var_value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
+        error "Decrypted content contains potentially malicious code in value: $var_name"
+        return 1
+      fi
+
+      # Export safely
+      export "$var_name=$var_value"
+    else
+      IFS="$old_ifs"
+      error "Invalid environment variable format: $line"
+      return 1
+    fi
+  done
+  IFS="$old_ifs"
+  return 0
+}
+
 # Load secrets from secrets.env
 load_secrets() {
   # Skip if already loaded in this session
@@ -208,21 +298,21 @@ load_secrets() {
 
     # Check if key file exists
     if [ ! -f "$AGE_KEY" ]; then
-      error "Age key not found at: $AGE_KEY"
+      error "Age key not found at: $(sanitize_path "$AGE_KEY")"
       echo
       echo "Your encryption key is missing. To recover:"
-      echo "  1. If you have a backup of your key, restore it to: $AGE_KEY"
+      echo "  1. If you have a backup of your key, restore it to: $(sanitize_path "$AGE_KEY")"
       echo "  2. Otherwise, you'll need to reconfigure your providers"
       echo
       echo "To start fresh:"
-      echo "  1. Remove encrypted file: rm $SECRETS_AGE"
+      echo "  1. Remove encrypted file: rm $(sanitize_path "$SECRETS_AGE")"
       echo "  2. Reconfigure providers: clauver config <provider>"
       return 1
     fi
 
     # Test decryption first to catch corruption early
     local temp_decrypt
-    temp_decrypt=$(mktemp -t clauver_decrypt_XXXXXXXXXX) || {
+    temp_decrypt=$(create_secure_temp_file "clauver_decrypt") || {
       error "Failed to create temporary file for decryption"
       return 1
     }
@@ -248,7 +338,7 @@ load_secrets() {
       echo
       echo "To recover:"
       echo "  1. Check your age key backup and restore if needed"
-      echo "  2. If file is corrupted, remove it: rm $SECRETS_AGE"
+      echo "  2. If file is corrupted, remove it: rm $(sanitize_path "$SECRETS_AGE")"
       echo "  3. Reconfigure your providers: clauver config <provider>"
       return 1
     fi
@@ -265,16 +355,18 @@ load_secrets() {
       echo
       echo "To recover:"
       echo "  1. Verify your age key backup"
-      echo "  2. Remove corrupted file: rm $SECRETS_AGE"
+      echo "  2. Remove corrupted file: rm $(sanitize_path "$SECRETS_AGE")"
       echo "  3. Reconfigure providers: clauver config <provider>"
       rm -f "$temp_decrypt"
       return 1
     fi
 
-    # Security: Source decrypted content only after successful validation
-    # This prevents execution of error messages as bash code
-    # shellcheck disable=SC1090
-    source <(echo "$decrypt_test")
+    # Security: Load decrypted content only after successful validation
+    # Use safe loading instead of source to prevent code execution
+    load_decrypted_content_safely "$decrypt_test" || {
+      error "Failed to load decrypted content safely"
+      return 1
+    }
   elif [ -f "$SECRETS" ]; then
     # Export all variables from secrets.env (backward compatibility)
     # shellcheck disable=SC1090
@@ -377,7 +469,7 @@ set_config() {
   mkdir -p "$(dirname "$CONFIG")"
 
   local tmp
-  tmp="$(mktemp "${CONFIG}.XXXXXX")"
+  tmp="$(create_secure_temp_file "config")"
   if [ -f "$CONFIG" ]; then
     grep -v -E "^${key}=" "$CONFIG" > "$tmp" 2>/dev/null || true
   fi
@@ -470,7 +562,7 @@ get_latest_version() {
   local latest_version=""
   # Run curl in background with timeout for progress indicator
   local temp_output
-  temp_output=$(mktemp -t clauver_version_XXXXXXXXXX) || {
+  temp_output=$(create_secure_temp_file "clauver_version") || {
     error "Failed to create temporary file for version check"
     return 1
   }
@@ -570,11 +662,11 @@ cmd_update() {
   echo "Updating from v${VERSION} to v${latest_version}..."
 
   local temp_file temp_checksum
-  temp_file=$(mktemp) || {
+  temp_file=$(create_secure_temp_file "clauver_download") || {
     error "Failed to create temporary file for download"
     return 1
   }
-  temp_checksum=$(mktemp) || {
+  temp_checksum=$(create_secure_temp_file "clauver_checksum") || {
     error "Failed to create temporary file for checksum"
     rm -f "$temp_file"
     return 1
@@ -808,7 +900,7 @@ config_standard_provider() {
 
   # Show encryption status
   if [ -f "$SECRETS_AGE" ]; then
-    echo -e "${GREEN}🔒 Secrets encrypted at: $SECRETS_AGE${NC}"
+    echo -e "${GREEN}🔒 Secrets encrypted at: $(sanitize_path "$SECRETS_AGE")${NC}"
   fi
 }
 
@@ -1120,32 +1212,36 @@ validate_api_key() {
     return 1
   fi
 
-  # Security validation - prevent injection attacks
-  # Reject dangerous characters that could be used for command injection
-  local dangerous_chars='[;`$|&<>]'
-  if [[ "$key" =~ [$dangerous_chars] ]]; then
-    error "API key contains dangerous characters that could be used for injection attacks"
+  # Enhanced security validation - prevent ALL shell metacharacters
+  # Allow only alphanumeric, dot, underscore, hyphen, and common API key chars
+  if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    error "API key contains invalid characters"
     return 1
   fi
 
-  # Reject potential command substitution patterns
-  if [[ "$key" =~ \$\(.*\) ]]; then
-    error "API key contains potential command substitution pattern"
-    return 1
-  fi
-
-  # Reject quote characters that could break parsing
-  if [[ "$key" =~ [\'\"] ]]; then
-    error "API key contains quote characters that could break parsing"
-    return 1
-  fi
+  # Additional security checks
+  # Reject any shell command patterns
+  local shell_patterns=('rm' '&&' '||' ';' '|' '`' '$(' '}')
+  for pattern in "${shell_patterns[@]}"; do
+    if [[ "$key" == *"$pattern"* ]]; then
+      error "API key contains prohibited shell pattern: $pattern"
+      return 1
+    fi
+  done
 
   # Provider-specific validation
   case "$provider" in
-    "zai"|"minimax"|"kimi")
-      # Most API keys are alphanumeric with some special chars
+    "zai"|"minimax"|"kimi"|"deepseek")
+      # Most API keys start with sk- or similar prefixes
       if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        error "API key contains invalid characters for $provider (only alphanumeric, dot, underscore, hyphen allowed)"
+        error "API key contains invalid characters for $provider"
+        return 1
+      fi
+      ;;
+    "custom")
+      # Custom providers may have different key formats
+      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+        error "API key contains invalid characters"
         return 1
       fi
       ;;
@@ -1163,16 +1259,66 @@ validate_url() {
     return 1
   fi
 
-  # Check URL format
-  if [[ ! "$url" =~ ^https?:// ]]; then
-    error "URL must start with http:// or https://"
+  # Enforce HTTPS only
+  if [[ ! "$url" =~ ^https:// ]]; then
+    error "URL must use HTTPS protocol for security"
     return 1
   fi
 
-  # Check for valid hostname
-  if [[ ! "$url" =~ ^https?://[a-zA-Z0-9.-]+ ]]; then
+  # Check URL length (prevent DoS)
+  if [ ${#url} -gt 2048 ]; then
+    error "URL too long (maximum 2048 characters)"
+    return 1
+  fi
+
+  # Validate hostname format
+  if [[ ! "$url" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$ ]]; then
     error "Invalid URL format"
     return 1
+  fi
+
+  # Extract hostname for SSRF protection
+  local hostname
+  hostname=$(echo "$url" | sed -e 's|^https://||' -e 's|:.*||' -e 's|/.*||')
+
+  # SSRF protection - block internal networks
+  case "$hostname" in
+    # Localhost variations
+    "localhost"|"127.0.0.1"|"::1")
+      error "Localhost URLs not allowed for security"
+      return 1
+      ;;
+    # Private IPv4 ranges
+    10.*|172.[0-9]*|192.168.*)
+      error "Private IP addresses not allowed for security"
+      return 1
+      ;;
+    # Link-local
+    169.254.*)
+      error "Link-local addresses not allowed for security"
+      return 1
+      ;;
+    # Class D/E (multicast/experimental)
+    224.*|239.*|240.*|241.*|242.*|243.*|244.*|245.*|246.*|247.*|248.*|249.*|250.*|251.*|252.*|253.*|254.*|255.*)
+      error "Multicast/experimental addresses not allowed"
+      return 1
+      ;;
+  esac
+
+  # Check for .localhost TLD
+  if [[ "$hostname" == *.localhost ]]; then
+    error "Localhost domain not allowed for security"
+    return 1
+  fi
+
+  # Validate port range (if specified)
+  if [[ "$url" =~ :([0-9]+) ]]; then
+    local port="${BASH_REMATCH[1]}"
+    # Reject privileged ports and common internal service ports
+    if [ "$port" -le 1024 ] || [ "$port" -eq 3306 ] || [ "$port" -eq 5432 ] || [ "$port" -eq 6379 ]; then
+      error "Port $port not allowed for security"
+      return 1
+    fi
   fi
 
   return 0
@@ -1252,14 +1398,22 @@ validate_decrypted_content() {
   fi
 
   # Check for obvious non-environment-variable content
-  # Reject content that looks like error messages (more precise patterns)
-  if [[ "$content" =~ (error|Error|ERROR)[:][[:space:]] ]] || [[ "$content" =~ (failed|Failed|FAILED)[:][[:space:]] ]] || [[ "$content" =~ (invalid|Invalid|INVALID)[:][[:space:]] ]] || [[ "$content" =~ (corrupt|Corrupt|CORRUPT)[:][[:space:]] ]] || [[ "$content" =~ (permission|Permission|PERMISSION)[[:space:]]+denied ]]; then
+  # More precise patterns for error messages
+  if [[ "$content" =~ ^(error|Error|ERROR)[:][[:space:]] ]] || \
+     [[ "$content" =~ ^(failed|Failed|FAILED)[:][[:space:]] ]] || \
+     [[ "$content" =~ ^(invalid|Invalid|INVALID)[:][[:space:]] ]] || \
+     [[ "$content" =~ ^(corrupt|Corrupt|CORRUPT)[:][[:space:]] ]] || \
+     [[ "$content" =~ ^(permission|Permission|PERMISSION)[[:space:]]+denied ]]; then
     error "Decrypted content contains error indicators - may be corrupted"
     return 1
   fi
 
-  # Reject dangerous bash constructs by checking for problematic characters
-  if [[ "$content" =~ \$ ]] || [[ "$content" =~ \` ]] || [[ "$content" =~ \( ]] || [[ "$content" =~ \) ]] || [[ "$content" =~ \[ ]] || [[ "$content" =~ \] ]] || [[ "$content" =~ \{ ]] || [[ "$content" =~ \} ]] || [[ "$content" =~ \; ]] || [[ "$content" =~ \& ]] || [[ "$content" =~ \| ]] || [[ "$content" =~ \< ]] || [[ "$content" =~ \> ]]; then
+  # Check for dangerous bash constructs (more targeted)
+  # Only reject clearly malicious patterns, not valid API key characters
+  if [[ "$content" =~ \$\(.*\) ]] || \
+     [[ "$content" =~ \`.*\` ]] || \
+     [[ "$content" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]] || \
+     [[ "$content" =~ (>|>>|<<)[[:space:]]/ ]]; then
     error "Decrypted content contains potentially malicious code"
     return 1
   fi
@@ -1274,15 +1428,18 @@ validate_decrypted_content() {
 
     # Check if line matches environment variable format
     if [[ ! "$line" =~ ^[A-Z_][A-Z0-9_]*=(.*)$ ]]; then
-      error "Decrypted content contains invalid format"
+      error "Decrypted content contains invalid format: $line"
       return 1
     fi
 
     # Extract and validate the value part
     local value="${BASH_REMATCH[1]}"
-    # Reject dangerous characters in values (same check as above)
-    if [[ "$value" =~ \$ ]] || [[ "$value" =~ \` ]] || [[ "$value" =~ \( ]] || [[ "$value" =~ \) ]] || [[ "$value" =~ \[ ]] || [[ "$value" =~ \] ]] || [[ "$value" =~ \{ ]] || [[ "$value" =~ \} ]] || [[ "$value" =~ \; ]] || [[ "$value" =~ \& ]] || [[ "$value" =~ \| ]] || [[ "$value" =~ \< ]] || [[ "$value" =~ \> ]]; then
-      error "Decrypted content contains potentially malicious code"
+
+    # Allow common API key characters but reject obviously dangerous patterns
+    if [[ "$value" =~ \$\(.*\) ]] || \
+       [[ "$value" =~ \`.*\` ]] || \
+       [[ "$value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
+      error "Decrypted content contains potentially malicious code in value"
       return 1
     fi
   done
@@ -1582,7 +1739,7 @@ cmd_migrate() {
   # Check if already encrypted
   if [ -f "$SECRETS_AGE" ] && [ ! -f "$SECRETS" ]; then
     success "Secrets are already encrypted!"
-    echo "  Location: $SECRETS_AGE"
+    echo "  Location: $(sanitize_path "$SECRETS_AGE")"
     return 0
   fi
 
@@ -1616,10 +1773,10 @@ cmd_migrate() {
   log "Encrypting secrets..."
   if save_secrets; then
     success "Secrets successfully encrypted!"
-    echo "  Encrypted file: $SECRETS_AGE"
+    echo "  Encrypted file: $(sanitize_path "$SECRETS_AGE")"
     echo "  Plaintext file: removed"
     echo
-    warn "IMPORTANT: Back up your age key at: $AGE_KEY"
+    warn "IMPORTANT: Back up your age key at: $(sanitize_path "$AGE_KEY")"
     echo "Without this key, you cannot decrypt your secrets."
   else
     error "Failed to encrypt secrets."
