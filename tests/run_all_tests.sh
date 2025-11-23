@@ -37,6 +37,7 @@ TEST_ROOT="$(dirname "${BASH_SOURCE[0]}")"
 # Test categories
 declare -A TEST_CATEGORIES=(
     ["utilities"]="test_utilities.sh"
+    ["ui_module"]="test_ui_module.sh"
     ["encryption"]="test_encryption_security.sh"
     ["security"]="test_security.sh"
     ["security_hardening"]="test_security_hardening.sh"
@@ -454,7 +455,7 @@ main() {
             run_all_tests
             generate_test_report
             ;;
-        "utilities"|"encryption"|"security"|"security_hardening"|"providers"|"integration"|"error_handling"|"performance")
+        "utilities"|"ui_module"|"encryption"|"security"|"security_hardening"|"providers"|"integration"|"error_handling"|"performance")
             run_category_tests "$1"
             generate_test_report
             ;;
