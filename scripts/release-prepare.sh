@@ -432,12 +432,9 @@ generate_checksums() {
     log "Generating SHA256 checksums for $version (mode: $SHA256_MODE)..."
 
     if [[ "$DRY_RUN" == "true" ]]; then
-        if [[ "$SHA256_MODE" == "minimal" ]]; then
-            log "[DRY RUN] Would generate clauver.sh.sha256 only"
-        else
-            log "[DRY RUN] Would generate clauver.sh.sha256"
-            log "[DRY RUN] Would create source archives"
-            log "[DRY RUN] Would generate individual .sha256 files for each artifact"
+        log "[DRY RUN] Would generate clauver.sh.sha256"
+        if [[ "$SHA256_MODE" == "full" ]]; then
+            log "[DRY RUN] Full mode enabled - release artifacts will be generated during GitHub release"
         fi
         return 0
     fi
@@ -462,60 +459,13 @@ generate_checksums() {
         exit 1
     fi
 
-    # Minimal mode: only generate clauver.sh.sha256
     if [[ "$SHA256_MODE" == "minimal" ]]; then
         success "Minimal SHA256 generation completed"
         log "Generated: clauver.sh.sha256"
-        return 0
-    fi
-
-    # Full mode: generate all SHA256 files
-    log "Full SHA256 generation mode enabled"
-
-    # Create release directory and archives
-    mkdir -p dist
-
-    # Create tar.gz archive
-    git archive --prefix="clauver-${version}/" -o "dist/clauver-${version}.tar.gz" HEAD
-    log "Created dist/clauver-${version}.tar.gz"
-
-    # Create zip archive
-    git archive --prefix="clauver-${version}/" -o "dist/clauver-${version}.zip" HEAD
-    log "Created dist/clauver-${version}.zip"
-
-    # Copy main files to dist
-    cp clauver.sh clauver.sh.sha256 dist/
-
-    # Generate individual .sha256 files for each artifact
-    cd dist
-
-    # Generate SHA256 for tar.gz
-    sha256sum "clauver-${version}.tar.gz" > "clauver-${version}.tar.gz.sha256"
-    log "Generated clauver-${version}.tar.gz.sha256"
-
-    # Generate SHA256 for zip
-    sha256sum "clauver-${version}.zip" > "clauver-${version}.zip.sha256"
-    log "Generated clauver-${version}.zip.sha256"
-
-    # Generate SHA256 for clauver.sh in dist
-    sha256sum clauver.sh > clauver.sh.sha256
-    log "Generated clauver.sh.sha256"
-
-    # Also generate comprehensive SHA256SUMS for convenience
-    sha256sum ./* > SHA256SUMS
-    log "Generated comprehensive SHA256SUMS"
-
-    cd ..
-
-    success "Generated individual .sha256 files and SHA256SUMS in dist/"
-
-    # Show contents
-    log "Generated files:"
-    ls -la dist/
-
-    if [[ -f "dist/SHA256SUMS" ]]; then
-        log "SHA256SUMS contents:"
-        cat dist/SHA256SUMS
+    else
+        success "SHA256 generation completed"
+        log "Generated: clauver.sh.sha256"
+        log "Release artifacts will be generated during GitHub release creation"
     fi
 }
 
@@ -599,6 +549,74 @@ extract_changelog_for_version() {
     ' "$changelog_file"
 }
 
+# Generate release artifacts (clean dist and create all files)
+generate_release_artifacts() {
+    local version="$1"
+
+    log "Generating release artifacts for $version..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would clean dist directory"
+        log "[DRY RUN] Would create release artifacts in dist/"
+        return 0
+    fi
+
+    # Change to project root
+    cd "$PROJECT_ROOT"
+
+    # Clean dist directory if it exists
+    if [[ -d "dist" ]]; then
+        log "Cleaning existing dist directory..."
+        rm -rf dist
+    fi
+
+    # Create fresh dist directory
+    mkdir -p dist
+    log "Created clean dist directory"
+
+    # Create tar.gz archive
+    git archive --prefix="clauver-${version}/" -o "dist/clauver-${version}.tar.gz" HEAD
+    log "Created dist/clauver-${version}.tar.gz"
+
+    # Create zip archive
+    git archive --prefix="clauver-${version}/" -o "dist/clauver-${version}.zip" HEAD
+    log "Created dist/clauver-${version}.zip"
+
+    # Copy main files to dist
+    cp clauver.sh clauver.sh.sha256 dist/
+    log "Copied clauver.sh and clauver.sh.sha256 to dist"
+
+    # Generate individual .sha256 files for each artifact
+    cd dist
+
+    # Generate SHA256 for tar.gz
+    sha256sum "clauver-${version}.tar.gz" > "clauver-${version}.tar.gz.sha256"
+    log "Generated clauver-${version}.tar.gz.sha256"
+
+    # Generate SHA256 for zip
+    sha256sum "clauver-${version}.zip" > "clauver-${version}.zip.sha256"
+    log "Generated clauver-${version}.zip.sha256"
+
+    # Regenerate SHA256 for clauver.sh in dist (ensures consistency)
+    sha256sum clauver.sh > clauver.sh.sha256
+    log "Regenerated clauver.sh.sha256 in dist"
+
+    # Generate comprehensive SHA256SUMS for convenience
+    sha256sum ./* > SHA256SUMS
+    log "Generated comprehensive SHA256SUMS"
+
+    cd ..
+
+    success "All release artifacts generated in dist/"
+    log "Generated files:"
+    ls -la dist/
+
+    if [[ -f "dist/SHA256SUMS" ]]; then
+        log "SHA256SUMS contents:"
+        cat dist/SHA256SUMS
+    fi
+}
+
 # Create GitHub release and upload artifacts
 create_github_release() {
     local version="$1"
@@ -631,13 +649,11 @@ create_github_release() {
         log "Deleted existing GitHub release $version"
     fi
 
-    # Change to project root and check for dist directory
-    cd "$PROJECT_ROOT"
-    if [[ ! -d "dist" ]]; then
-        error "dist directory not found. Run generate_checksums() first to create release artifacts."
-        exit 1
-    fi
-    cd dist
+    # Generate release artifacts (cleans dist and creates all files)
+    generate_release_artifacts "$version"
+
+    # Change to dist directory for upload
+    cd "$PROJECT_ROOT/dist"
 
     # Create release with artifacts
     local artifacts=(
@@ -939,12 +955,17 @@ main() {
             # Create GitHub release if requested
             if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
                 if [[ "$AUTO_UPDATE" == "true" ]]; then
-                    warn "Skipping GitHub release creation for new version without existing tag"
-                    warn "Please create the git tag first, then run release preparation again:"
+                    warn "Creating GitHub release for new version $VERSION"
+                    warn "Note: Make sure to commit version changes and create the git tag first:"
                     warn "  git add ."
                     warn "  git commit -m \"chore: bump version to ${VERSION#v}\""
                     warn "  git tag $VERSION"
-                    warn "  ./scripts/release-prepare.sh $VERSION --gh-release"
+                    read -r -p "Continue with GitHub release creation? [y/N]: " confirm
+                    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+                        log "Skipping GitHub release creation"
+                    else
+                        create_github_release "$VERSION"
+                    fi
                 else
                     create_github_release "$VERSION"
                 fi
