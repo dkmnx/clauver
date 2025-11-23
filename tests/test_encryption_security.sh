@@ -421,6 +421,145 @@ create_age_key() {
     chmod 600 "$CLAUVER_HOME/age.key"
 }
 
+test_decrypted_content_validation() {
+    start_test "test_decrypted_content_validation" "Test decrypted content validation security"
+
+    setup_test_environment "decrypted_content_validation_test"
+
+    # Source clauver script AFTER setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
+    # Test valid single line environment variable
+    assert_command_success "validate_decrypted_content 'ZAI_API_KEY=sk-test1234567890abcdef'" "Valid single line content should pass"
+
+    # Test valid multi-line environment variables
+    local multiline_content="ZAI_API_KEY=sk-test-zai-key-123
+MINIMAX_API_KEY=sk-test-minimax-key-456
+KIMI_API_KEY=sk-test-kimi-key-789"
+    assert_command_success "validate_decrypted_content '$multiline_content'" "Valid multi-line content should pass"
+
+    # Test content with spaces and tabs (allowed)
+    assert_command_success "validate_decrypted_content 'API_KEY=test-key-with-dashes'" "Content with dashes should pass"
+
+    # Test empty content rejection
+    assert_command_failure "validate_decrypted_content ''" "Empty content should be rejected"
+
+    # Test content with error messages (various formats)
+    assert_command_failure "validate_decrypted_content 'error: decryption failed'" "Content with error message should be rejected"
+    assert_command_failure "validate_decrypted_content 'Error: Wrong key'" "Content with Error message should be rejected"
+    assert_command_failure "validate_decrypted_content 'ERROR: Corrupted file'" "Content with ERROR message should be rejected"
+    assert_command_failure "validate_decrypted_content 'failed: operation failed'" "Content with failed message should be rejected"
+    assert_command_failure "validate_decrypted_content 'Invalid: wrong format'" "Content with Invalid message should be rejected"
+    assert_command_failure "validate_decrypted_content 'permission denied'" "Content with permission denied should be rejected"
+
+    # Test malicious content with dangerous characters
+    assert_command_failure "validate_decrypted_content 'rm -rf /'" "Malicious command should be rejected"
+    assert_command_failure "validate_decrypted_content 'ZAI_API_KEY=test;rm -rf /'" "Injection attempt should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test\$(whoami)'" "Command substitution should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test\\\`rm -rf /\\\`'" "Backtick injection should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test|cat /etc/passwd'" "Pipe injection should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test&&rm -rf /'" "Double ampersand should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test>/dev/null'" "Redirection should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test<script>'" "Script injection should be rejected"
+
+    # Test invalid environment variable formats
+    assert_command_failure "validate_decrypted_content 'invalid_key=test123'" "Lowercase key name should be rejected"
+    assert_command_failure "validate_decrypted_content 'INVALID-KEY=test123'" "Key with hyphen should be rejected"
+    assert_command_failure "validate_decrypted_content '123INVALID_KEY=test123'" "Key starting with number should be rejected"
+    assert_command_failure "validate_decrypted_content 'INVALID KEY=test123'" "Key with space should be rejected"
+    assert_command_failure "validate_decrypted_content 'NOT_A_VAR'" "Missing equals sign should be rejected"
+
+    # Test dangerous characters in values
+    assert_command_failure "validate_decrypted_content 'API_KEY=test\$whoami'" "Dollar sign in value should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test\$(rm -rf /)'" "Command substitution in value should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test;rm -rf /'" "Semicolon in value should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test|cat file'" "Pipe in value should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test<file'" "Less than in value should be rejected"
+    assert_command_failure "validate_decrypted_content 'API_KEY=test>file'" "Greater than in value should be rejected"
+
+    # Test edge cases that should pass
+    assert_command_success "validate_decrypted_content 'API_KEY_WITH_INVALID_IN_NAME=test123'" "Key containing 'invalid' but not error should pass"
+    assert_command_success "validate_decrypted_content 'ERROR_RECOVERY_KEY=test123'" "Key starting with ERROR should pass"
+    assert_command_success "validate_decrypted_content 'FAILED_ATTEMPT_KEY=test123'" "Key containing 'failed' should pass"
+    assert_command_success "validate_decrypted_content 'ZAI_API_KEY=test-key_with_123_numbers_and_underscores'" "Complex valid key should pass"
+
+    # Test comments and empty lines (should be skipped)
+    local content_with_comments="# This is a comment
+ZAI_API_KEY=test123
+
+# Another comment
+MINIMAX_API_KEY=test456
+"
+    assert_command_success "validate_decrypted_content '$content_with_comments'" "Content with comments and empty lines should pass"
+
+    cleanup_test_environment "decrypted_content_validation_test"
+    end_test
+}
+
+test_load_secrets_malicious_content() {
+    start_test "test_load_secrets_malicious_content" "Test load_secrets function with malicious/corrupted content"
+
+    setup_test_environment "load_secrets_malicious_test"
+
+    # Source clauver script AFTER setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
+    # Ensure age key exists
+    ensure_age_key
+
+    # Create a fake encrypted file that will decrypt to malicious content
+    # Instead of using age, we'll create a fake temp file that simulates malicious decrypted content
+    local temp_decrypt
+    temp_decrypt=$(mktemp -t clauver_malicious_XXXXXXXXXX) || {
+        error "Failed to create temporary file for malicious content test"
+        cleanup_test_environment "load_secrets_malicious_test"
+        end_test
+        return 1
+    }
+
+    # Test 1: Malicious command injection
+    echo "rm -rf /" > "$temp_decrypt"
+    assert_command_failure "SECRETS_AGE='$temp_decrypt' AGE_KEY='$CLAUVER_HOME/age.key' load_secrets" "load_secrets should reject malicious command"
+
+    # Test 2: Injection attempt in API key
+    echo "ZAI_API_KEY=test;rm -rf /" > "$temp_decrypt"
+    assert_command_failure "SECRETS_AGE='$temp_decrypt' AGE_KEY='$CLAUVER_HOME/age.key' load_secrets" "load_secrets should reject injection attempt"
+
+    # Test 3: Error message content
+    echo "error: decryption failed" > "$temp_decrypt"
+    assert_command_failure "SECRETS_AGE='$temp_decrypt' AGE_KEY='$CLAUVER_HOME/age.key' load_secrets" "load_secrets should reject error message content"
+
+    # Test 4: Invalid format
+    echo "invalid_key_format=test123" > "$temp_decrypt"
+    assert_command_failure "SECRETS_AGE='$temp_decrypt' AGE_KEY='$CLAUVER_HOME/age.key' load_secrets" "load_secrets should reject invalid format"
+
+    # Test 5: Valid content should work (but we need to simulate proper age decryption)
+    # For this test, we'll use the real save/load functionality
+    export ZAI_API_KEY="sk-test-valid-key-123456789"
+    export MINIMAX_API_KEY="sk-test-valid-key-987654321"
+
+    # Save real encrypted secrets
+    assert_command_success "save_secrets" "Saving valid secrets should succeed"
+
+    # Clear environment variables
+    unset ZAI_API_KEY MINIMAX_API_KEY
+
+    # Load should succeed with valid encrypted content
+    assert_command_success "load_secrets" "Loading valid encrypted secrets should succeed"
+
+    # Verify secrets were loaded
+    local loaded_zai
+    loaded_zai=$(get_secret "ZAI_API_KEY")
+    assert_equals "$loaded_zai" "sk-test-valid-key-123456789" "Valid ZAI key should be loaded"
+
+    # Clean up
+    rm -f "$temp_decrypt"
+    unset ZAI_API_KEY MINIMAX_API_KEY
+
+    cleanup_test_environment "load_secrets_malicious_test"
+    end_test
+}
+
 # Run all encryption and security tests
 main() {
     echo "Starting encryption and security tests..."
@@ -432,6 +571,8 @@ main() {
     test_encryption_migration
     test_config_file_security
     test_input_validation_security
+    test_decrypted_content_validation
+    test_load_secrets_malicious_content
     test_secrets_caching
     test_config_caching
     test_age_key_backup
