@@ -2,8 +2,13 @@
 # shellcheck disable=SC1091
 # Performance and mock/stub framework tests for clauver
 
-# Source the test framework and clauver script
+# Source the test framework first
 source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
+
+# Initialize test framework BEFORE sourcing clauver.sh to ensure CLAUVER_HOME is set
+test_framework_init
+
+# Source clauver script AFTER framework initialization with correct environment
 source "$(dirname "${BASH_SOURCE[0]}")/../clauver.sh"
 
 # Performance testing framework
@@ -57,11 +62,17 @@ test_encryption_performance() {
 
     setup_test_environment "encryption_performance_test"
 
+    # Source clauver script AFTER setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
+    # Ensure age key exists for encryption tests
+    ensure_age_key
+
     # Test encryption performance with different data sizes
     export ZAI_API_KEY="sk-performance-test-key"
 
     # Time save_secrets operation
-    measure_performance "source $CLAUVER_SCRIPT && save_secrets" >/dev/null
+    measure_performance "save_secrets" >/dev/null
 
     assert_command_success "save_secrets" "Encryption should succeed"
     assert_file_exists "$CLAUVER_HOME/secrets.env.age" "Encrypted file should exist"

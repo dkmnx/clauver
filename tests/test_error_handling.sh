@@ -2,8 +2,13 @@
 # shellcheck disable=SC1091
 # Error handling and edge case tests for clauver
 
-# Source the test framework and clauver script
+# Source the test framework first
 source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
+
+# Initialize test framework BEFORE sourcing clauver.sh to ensure CLAUVER_HOME is set
+test_framework_init
+
+# Source clauver script AFTER framework initialization with correct environment
 source "$(dirname "${BASH_SOURCE[0]}")/../clauver.sh"
 
 # Test suite for error handling and edge cases

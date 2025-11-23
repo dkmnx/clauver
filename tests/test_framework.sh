@@ -78,6 +78,23 @@ test_framework_init() {
     TEST_FAILED=0
     TEST_SKIPPED=0
 
+    # Validate critical environment variables
+    if [ -z "${CLAUVER_HOME:-}" ]; then
+        echo "ERROR: CLAUVER_HOME is not set after test_framework_init!"
+        echo "This indicates a framework initialization failure."
+        echo "Current working directory: $(pwd)"
+        exit 1
+    fi
+
+    if [ ! -d "$CLAUVER_HOME" ]; then
+        echo "ERROR: CLAUVER_HOME directory does not exist: $CLAUVER_HOME"
+        echo "Creating directory..."
+        mkdir -p "$CLAUVER_HOME" || {
+            echo "ERROR: Failed to create CLAUVER_HOME directory"
+            exit 1
+        }
+    fi
+
     log_framework "Test framework initialized"
     log_framework "CLAUVER_HOME: $CLAUVER_HOME"
     log_framework "Test directory: $TEST_TEMP_DIR"
