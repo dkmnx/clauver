@@ -25,17 +25,17 @@ CREATE_GH_RELEASE=false
 SHA256_MODE="full"
 
 show_help() {
-    cat << EOF
-Usage: $(basename "$0") [command] [version] [options]
+    cat << 'EOF'
+Usage: ./scripts/release-prepare.sh [command] [version] [options]
 
 Commands:
-    release           Prepare a release (default)
+    release           Prepare a release (default command)
     update-version    Update version numbers in source files
 
 Arguments:
-    version    Version to prepare/update (e.g., v1.9.2)
-              Required for update-version command
-              Optional for release command when using --sha256-minimal
+    version           Version to prepare/update (e.g., v1.9.2)
+                      Required for update-version command
+                      Optional for release command when using --sha256-minimal
 
 Options:
     --dry-run         Show what would be done without executing
@@ -45,11 +45,11 @@ Options:
     --help            Show this help message
 
 Examples:
-    ./scripts/release-prepare.sh v1.9.2                       # Prepare release
-    ./scripts/release-prepare.sh v1.9.2 --dry-run            # Dry run release
-    ./scripts/release-prepare.sh update-version v1.9.3       # Update version numbers
+    ./scripts/release-prepare.sh v1.9.2                           # Prepare release
+    ./scripts/release-prepare.sh v1.9.2 --dry-run                 # Dry run release
+    ./scripts/release-prepare.sh update-version v1.9.3            # Update version numbers
     ./scripts/release-prepare.sh update-version v1.9.3 --dry-run  # Preview version updates
-    ./scripts/release-prepare.sh --sha256-minimal            # Auto-detect and prepare release
+    ./scripts/release-prepare.sh --sha256-minimal                 # Auto-detect and prepare release
 EOF
 }
 
