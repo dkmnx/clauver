@@ -375,6 +375,46 @@ validation_decrypted_content() {
   return 0
 }
 
+# =============================================================================
+# CONFIG MODULE: Configuration management and caching with consistent prefixes
+# =============================================================================
+
+config_get_value() {
+  # Rename from get_config
+  get_config "$1"
+}
+
+config_set_value() {
+  # Rename from set_config with added cache invalidation
+  set_config "$1" "$2"
+  config_cache_invalidate
+}
+
+config_cache_load() {
+  # Rename from load_config_cache
+  load_config_cache
+}
+
+config_cache_invalidate() {
+  # New function to invalidate cache
+  CONFIG_CACHE_LOADED=0
+  unset CONFIG_CACHE
+  declare -gA CONFIG_CACHE
+}
+
+config_load_secrets() {
+  # Rename from load_secrets with added cache invalidation
+  config_cache_invalidate
+  load_secrets
+}
+
+config_get_secret() {
+  # Rename from get_secret with improved secret loading
+  config_load_secrets
+  local value="${!1:-}"
+  echo "$value"
+}
+
 # Progress indicator for long-running operations
 show_progress() {
   local message="$1"
