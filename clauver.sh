@@ -23,6 +23,9 @@ CONFIG_CACHE_LOADED=0
 # shellcheck disable=SC2034
 declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 
+# shellcheck disable=SC2016
+MATCH_SHELL_PATTERNS=('rm' '&&' '||' ';' '|' '`' '$(' '}' '&')
+
 # Configuration constants - extracted from hardcoded values
 declare -A PROVIDER_DEFAULTS=(
   ["zai_base_url"]="https://api.z.ai/api/anthropic"
@@ -73,7 +76,7 @@ sanitize_path() {
   local path="$1"
   # Show only filename and directory, hide full path for security
   if [[ -n "$HOME" && "$path" == "$HOME"* ]]; then
-    echo "~${path#$HOME}"
+    echo "~${path#"$HOME"}"
   elif [[ "$path" == */* ]]; then
     echo ".../$(basename "$path")"
   else
@@ -1244,8 +1247,7 @@ validate_api_key() {
 
   # Additional security checks
   # Reject any shell command patterns
-  local shell_patterns=('rm' '&&' '||' ';' '|' '`' '$(' '}')
-  for pattern in "${shell_patterns[@]}"; do
+  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
     if [[ "$key" == *"$pattern"* ]]; then
       ui_error "API key contains prohibited shell pattern: $pattern"
       return 1

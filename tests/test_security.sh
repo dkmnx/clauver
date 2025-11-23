@@ -58,6 +58,8 @@ test_background_cleanup_safety() {
     # Test cleanup function handles malformed job list
     local old_jobs_list
     old_jobs_list="$(jobs -p 2>/dev/null || echo "")"
+    # shellcheck disable=SC2034
+    local unused_jobs_list="$old_jobs_list"  # Variable captured for test verification
 
     # Simulate malicious job list (PID injection attempt)
     # This test ensures the function doesn't execute arbitrary PIDs
