@@ -254,15 +254,27 @@ load_secrets() {
     fi
 
     # Security: Validate decrypted content before sourcing
-    # Only allow safe environment variable assignments
-    if [[ "$decrypt_test" =~ ^[A-Z_][A-Z0-9_]*=[a-zA-Z0-9._-]+[[:space:]]*$ ]]; then
-      # shellcheck disable=SC1090
-      source <(echo "$decrypt_test")
-    else
+    # This prevents execution of malicious or invalid content
+    if ! validate_decrypted_content "$decrypt_test"; then
       error "Decrypted content contains invalid format or potentially malicious code"
+      echo
+      echo "This could indicate:"
+      echo "  • File corruption or tampering"
+      echo "  • Encrypted file is not a valid secrets file"
+      echo "  • Age key mismatch (wrong key used)"
+      echo
+      echo "To recover:"
+      echo "  1. Verify your age key backup"
+      echo "  2. Remove corrupted file: rm $SECRETS_AGE"
+      echo "  3. Reconfigure providers: clauver config <provider>"
       rm -f "$temp_decrypt"
       return 1
     fi
+
+    # Security: Source decrypted content only after successful validation
+    # This prevents execution of error messages as bash code
+    # shellcheck disable=SC1090
+    source <(echo "$decrypt_test")
   elif [ -f "$SECRETS" ]; then
     # Export all variables from secrets.env (backward compatibility)
     # shellcheck disable=SC1090
@@ -1226,6 +1238,55 @@ validate_model_name() {
     error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
     return 1
   fi
+
+  return 0
+}
+
+# Validate decrypted secrets content
+validate_decrypted_content() {
+  local content="$1"
+
+  if [ -z "$content" ]; then
+    error "Decrypted content is empty"
+    return 1
+  fi
+
+  # Check for obvious non-environment-variable content
+  # Reject content that looks like error messages (more precise patterns)
+  if [[ "$content" =~ (error|Error|ERROR)[:][[:space:]] ]] || [[ "$content" =~ (failed|Failed|FAILED)[:][[:space:]] ]] || [[ "$content" =~ (invalid|Invalid|INVALID)[:][[:space:]] ]] || [[ "$content" =~ (corrupt|Corrupt|CORRUPT)[:][[:space:]] ]] || [[ "$content" =~ (permission|Permission|PERMISSION)[[:space:]]+denied ]]; then
+    error "Decrypted content contains error indicators - may be corrupted"
+    return 1
+  fi
+
+  # Reject dangerous bash constructs by checking for problematic characters
+  if [[ "$content" =~ \$ ]] || [[ "$content" =~ \` ]] || [[ "$content" =~ \( ]] || [[ "$content" =~ \) ]] || [[ "$content" =~ \[ ]] || [[ "$content" =~ \] ]] || [[ "$content" =~ \{ ]] || [[ "$content" =~ \} ]] || [[ "$content" =~ \; ]] || [[ "$content" =~ \& ]] || [[ "$content" =~ \| ]] || [[ "$content" =~ \< ]] || [[ "$content" =~ \> ]]; then
+    error "Decrypted content contains potentially malicious code"
+    return 1
+  fi
+
+  # Basic validation - check for at least one environment variable assignment
+  # Each line should be in format: KEY=value
+  local old_ifs="$IFS"
+  IFS=$'\n'
+  for line in $content; do
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Check if line matches environment variable format
+    if [[ ! "$line" =~ ^[A-Z_][A-Z0-9_]*=(.*)$ ]]; then
+      error "Decrypted content contains invalid format"
+      return 1
+    fi
+
+    # Extract and validate the value part
+    local value="${BASH_REMATCH[1]}"
+    # Reject dangerous characters in values (same check as above)
+    if [[ "$value" =~ \$ ]] || [[ "$value" =~ \` ]] || [[ "$value" =~ \( ]] || [[ "$value" =~ \) ]] || [[ "$value" =~ \[ ]] || [[ "$value" =~ \] ]] || [[ "$value" =~ \{ ]] || [[ "$value" =~ \} ]] || [[ "$value" =~ \; ]] || [[ "$value" =~ \& ]] || [[ "$value" =~ \| ]] || [[ "$value" =~ \< ]] || [[ "$value" =~ \> ]]; then
+      error "Decrypted content contains potentially malicious code"
+      return 1
+    fi
+  done
+  IFS="$old_ifs"
 
   return 0
 }
