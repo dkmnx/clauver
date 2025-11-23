@@ -5,6 +5,35 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.1] - 2025-11-23
+
+### Security
+
+- **Critical security enhancement** - Added comprehensive validation for decrypted secrets content to prevent
+  execution of malicious code
+- **Decrypted content validation** - New `validate_decrypted_content()` function performs multiple security checks:
+  - Detection of error indicators and corruption patterns
+  - Rejection of dangerous bash constructs (`$,`, (), [], {}, ;, &, |, <, >`)
+  - Strict validation of environment variable format (`KEY=value`)
+  - Prevention of command injection and substitution attacks
+- **Enhanced error handling** - Detailed recovery instructions when validation fails
+- **Memory-only security** - Secrets are only decrypted in memory and validated before execution
+
+### Added
+
+- **Comprehensive security test suite** - 40+ test assertions covering all attack vectors:
+  - `test_decrypted_content_validation()` with 21 unit tests
+  - `test_load_secrets_malicious_content()` with 7 integration tests
+  - Protection against injection attacks, error message corruption, and format violations
+- **Enhanced test coverage** - Security validation tests integrated into existing test framework
+- **End-to-end security validation** - Complete testing of `load_secrets()` function with malicious content
+
+### Fixed
+
+- **Security vulnerability** - Previously decrypted content could be executed without proper validation
+- **False positive prevention** - Improved error detection patterns to avoid false positives with valid variable names
+- **Comprehensive input sanitization** - Multi-layer validation prevents various attack vectors
+
 ## [1.11.0] - 2025-11-22
 
 ### Fixed

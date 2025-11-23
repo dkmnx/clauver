@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 077
 
-VERSION="1.11.0"
+VERSION="1.11.1"
 
 # Test mode detection - skip global config when running tests
 if [[ "${CLAUVER_TEST_MODE:-}" == "1" ]]; then

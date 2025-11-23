@@ -10,7 +10,7 @@ test_version_validation() {
     start_test "test_version_validation" "Test version format validation"
 
     # Test valid versions
-    local valid_versions=("v1.11.0" "v2.0.0" "v10.15.3")
+    local valid_versions=("v1.11.1" "v2.0.0" "v10.15.3")
     for version in "${valid_versions[@]}"; do
         if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "✓ Valid version format: $version"
@@ -21,7 +21,7 @@ test_version_validation() {
     done
 
     # Test invalid versions
-    local invalid_versions=("1.11.0" "v1.9" "v1.11.0.3" "latest" "v1.11.0-beta")
+    local invalid_versions=("1.11.1" "v1.9" "v1.11.1.3" "latest" "v1.11.1-beta")
     for version in "${invalid_versions[@]}"; do
         if [[ ! "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "✓ Correctly rejected invalid version: $version"
@@ -163,7 +163,7 @@ test_conventional_commits() {
     start_test "test_conventional_commits" "Test conventional commit message generation"
 
     # Test version bump commit
-    local version_bump="chore: bump version to 1.11.0"
+    local version_bump="chore: bump version to 1.11.1"
     if [[ "$version_bump" =~ ^chore:\ bump\ version\ to\ [0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "✓ Valid version bump commit format"
     else
@@ -172,7 +172,7 @@ test_conventional_commits() {
     fi
 
     # Test SHA256 commit
-    local sha256_commit="chore: add SHA256 checksums for v1.11.0"
+    local sha256_commit="chore: add SHA256 checksums for v1.11.1"
     if [[ "$sha256_commit" =~ ^chore:\ add\ SHA256\ checksums\ for\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "✓ Valid SHA256 commit format"
     else
@@ -181,7 +181,7 @@ test_conventional_commits() {
     fi
 
     # Test tag message
-    local tag_message="chore(release): version 1.11.0"
+    local tag_message="chore(release): version 1.11.1"
     if [[ "$tag_message" =~ ^chore\(release\):\ version\ [0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         echo "✓ Valid tag message format"
     else
