@@ -17,6 +17,8 @@ error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
 # Script configuration
 PROJECT_ROOT="$(git rev-parse --show-toplevel)"
+COMMAND="release"  # Default command is 'release'
+AUTO_UPDATE=false  # Auto-update version files when preparing release for new version
 DRY_RUN=false
 SKIP_TESTS=false
 CREATE_GH_RELEASE=false
@@ -24,26 +26,30 @@ SHA256_MODE="full"
 
 show_help() {
     cat << EOF
-Usage: $(basename "$0") [version] [options]
+Usage: $(basename "$0") [command] [version] [options]
+
+Commands:
+    release           Prepare a release (default)
+    update-version    Update version numbers in source files
 
 Arguments:
-    version    Version to prepare (e.g., v1.9.2)
-              Optional when using --sha256-minimal (auto-detects latest)
+    version    Version to prepare/update (e.g., v1.9.2)
+              Required for update-version command
+              Optional for release command when using --sha256-minimal
 
 Options:
     --dry-run         Show what would be done without executing
     --no-tests        Skip running tests (for CI environments)
-    --gh-release      Create GitHub release and upload artifacts
-    --sha256-minimal  Generate only clauver.sh.sha256 (default: full)
+    --gh-release      Create GitHub release and upload artifacts (release command only)
+    --sha256-minimal  Generate only clauver.sh.sha256 (default: full) (release command only)
     --help            Show this help message
 
 Examples:
-    ./scripts/release-prepare.sh v1.9.2
-    ./scripts/release-prepare.sh v1.9.2 --dry-run
-    ./scripts/release-prepare.sh v1.9.2 --no-tests
-    ./scripts/release-prepare.sh v1.9.2 --gh-release
-    ./scripts/release-prepare.sh --sha256-minimal           # Auto-detects version
-    ./scripts/release-prepare.sh --sha256-minimal --dry-run   # Auto-detects version
+    ./scripts/release-prepare.sh v1.9.2                       # Prepare release
+    ./scripts/release-prepare.sh v1.9.2 --dry-run            # Dry run release
+    ./scripts/release-prepare.sh update-version v1.9.3       # Update version numbers
+    ./scripts/release-prepare.sh update-version v1.9.3 --dry-run  # Preview version updates
+    ./scripts/release-prepare.sh --sha256-minimal            # Auto-detect and prepare release
 EOF
 }
 
@@ -57,10 +63,30 @@ parse_args() {
         fi
     done
 
-    # Parse options first to determine if --sha256-minimal is present
-    local args=("$@")
+    # Initialize variables
     local version_provided=false
     local sha256_minimal=false
+
+    # Check for command as first argument
+    if [[ $# -gt 0 ]]; then
+        case "$1" in
+            update-version)
+                COMMAND="update-version"
+                shift
+                ;;
+            release)
+                COMMAND="release"
+                shift
+                ;;
+            --*)  # Started with options, default to release
+                ;;
+            *)  # Started with version, default to release
+                ;;
+        esac
+    fi
+
+    # Parse options first to determine if --sha256-minimal is present
+    local args=("$@")
 
     # First pass: check for options and version presence
     for arg in "${args[@]}"; do
@@ -80,16 +106,20 @@ parse_args() {
         esac
     done
 
-    # Handle version requirement
+    # Handle version requirement based on command
     if [[ "$version_provided" == "false" ]]; then
-        if [[ "$sha256_minimal" == "true" ]]; then
+        if [[ "$COMMAND" == "update-version" ]]; then
+            error "Version argument is required for update-version command"
+            show_help
+            exit 1
+        elif [[ "$sha256_minimal" == "true" ]]; then
             # Auto-detect version for minimal mode
             if ! VERSION=$(auto_detect_latest_version); then
                 exit 1
             fi
             log "Using auto-detected version: $VERSION"
         else
-            error "Version argument is required"
+            error "Version argument is required for release command"
             show_help
             exit 1
         fi
@@ -107,10 +137,18 @@ parse_args() {
                 shift
                 ;;
             --gh-release)
+                if [[ "$COMMAND" == "update-version" ]]; then
+                    error "--gh-release is not supported with update-version command"
+                    exit 1
+                fi
                 CREATE_GH_RELEASE=true
                 shift
                 ;;
             --sha256-minimal)
+                if [[ "$COMMAND" == "update-version" ]]; then
+                    error "--sha256-minimal is not supported with update-version command"
+                    exit 1
+                fi
                 SHA256_MODE="minimal"
                 shift
                 ;;
@@ -189,16 +227,42 @@ validate_tag_consistency() {
 
     # Check if tag exists in git
     if ! git rev-parse "$version" >/dev/null 2>&1; then
-        error "Tag $version does not exist in git repository"
-        error ""
-        error "Available tags (latest first):"
-        git tag --sort=-version:refname | head -5 | sed 's/^/  - /'
-        error ""
-        error "Please check the latest release tag and try again."
-        error "You can also create a new release by:"
-        error "  1. Running: git tag $version"
-        error "  2. Running: git push --tags"
-        exit 1
+        # Tag doesn't exist - check if it's a newer version
+        local latest_tag
+        latest_tag=$(git tag --sort=-version:refname | head -1 2>/dev/null || echo "")
+
+        if [[ -z "$latest_tag" ]]; then
+            error "No existing git tags found and tag $version doesn't exist"
+            error "This appears to be the first release - please create the tag first:"
+            error "  git tag $version"
+            return 1
+        fi
+
+        local latest_version_no_prefix="${latest_tag#v}"
+        local version_no_prefix="${version#v}"
+
+        # Check if the requested version is newer than the latest tag
+        if [[ "$(printf '%s\n' "$latest_version_no_prefix" "$version_no_prefix" | sort -V | head -1)" == "$latest_version_no_prefix" && "$latest_version_no_prefix" != "$version_no_prefix" ]]; then
+            # This is a newer version - enable auto-update mode
+            warn "Tag $version does not exist but is newer than latest tag $latest_tag"
+            warn "Will auto-update version files and prepare for new release"
+            AUTO_UPDATE=true
+            return 0
+        else
+            # This is not a newer version - show error
+            error "Tag $version does not exist in git repository"
+            error ""
+            error "Available tags (latest first):"
+            git tag --sort=-version:refname | head -5 | sed 's/^/  - /'
+            error ""
+            error "Please check the latest release tag and try again."
+            error "You can also create a new release by:"
+            error "  1. Running: git tag $version"
+            error "  2. Running: git push --tags"
+            error ""
+            error "Or use a newer version (higher than $latest_tag)"
+            return 1
+        fi
     fi
 
     # Get latest tag from git
@@ -211,14 +275,14 @@ validate_tag_consistency() {
         error "Specified tag: $version"
         error ""
         error "Please use the latest tag or create a newer one."
-        exit 1
+        return 1
     fi
 
     # Check if version exists in changelog
     if [[ ! -f "$changelog_file" ]]; then
         error "CHANGELOG.md not found at $changelog_file"
         error "Please ensure the changelog exists and is up to date."
-        exit 1
+        return 1
     fi
 
     local changelog_version
@@ -227,7 +291,7 @@ validate_tag_consistency() {
     if [[ -z "$changelog_version" ]]; then
         error "No version entries found in CHANGELOG.md"
         error "Please ensure the changelog has proper version entries."
-        exit 1
+        return 1
     fi
 
     # Remove 'v' prefix from changelog version for comparison if it exists
@@ -242,11 +306,12 @@ validate_tag_consistency() {
         error ""
         error "Please ensure the CHANGELOG.md has an entry for version $version"
         error "Update the changelog to match the tag, or use the correct tag."
-        exit 1
+        return 1
     fi
 
     success "Tag validation passed: $version exists and is the latest"
     success "Changelog consistency verified: v$changelog_version"
+    return 0
 }
 
 # Check if working directory has changes that affect release
@@ -325,7 +390,10 @@ check_git_state() {
     check_working_directory_changes
 
     # Validate tag exists and is the latest
-    validate_tag_consistency "$VERSION"
+    if ! validate_tag_consistency "$VERSION"; then
+        error "Git repository state validation failed"
+        exit 1
+    fi
 
     log "Git repository state is valid"
 }
@@ -741,29 +809,169 @@ show_instructions() {
     fi
 }
 
+# Compare version for update-version command
+compare_version_for_update() {
+    local new_version="$1"
+    local new_version_no_prefix="${new_version#v}"
+
+    log "Comparing version with current release..."
+
+    # Get the latest git tag
+    local latest_tag
+    latest_tag=$(git tag --sort=-version:refname | head -1 2>/dev/null || echo "")
+
+    if [[ -z "$latest_tag" ]]; then
+        warn "No existing git tags found"
+        return 0
+    fi
+
+    local latest_version_no_prefix="${latest_tag#v}"
+
+    # Compare versions using sort -V for proper version comparison
+    if [[ "$(printf '%s\n' "$latest_version_no_prefix" "$new_version_no_prefix" | sort -V | head -1)" == "$new_version_no_prefix" && "$latest_version_no_prefix" != "$new_version_no_prefix" ]]; then
+        error "New version $new_version is lower than current latest version $latest_tag"
+        error "Version update must be greater than or equal to the latest release"
+        exit 1
+    elif [[ "$new_version_no_prefix" == "$latest_version_no_prefix" ]]; then
+        warn "New version $new_version is the same as current latest version $latest_tag"
+        warn "This will update files but the version number won't change"
+        return 0
+    else
+        log "Version update $latest_tag -> $new_version is valid"
+        return 0
+    fi
+}
+
+# Update version numbers in source files
+update_version_files() {
+    local new_version="$1"
+    local version_no_prefix="${new_version#v}"
+
+    log "Updating version numbers to $new_version..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log "[DRY RUN] Would update version numbers in the following files:"
+        log "[DRY RUN] - clauver.sh (line 6): VERSION=\"$version_no_prefix\""
+        log "[DRY RUN] - install.sh (line 7): VERSION=\"$version_no_prefix\""
+        log "[DRY RUN] - README.md (line 14): version badge to $version_no_prefix"
+        return 0
+    fi
+
+    # Update clauver.sh
+    local clauver_file="$PROJECT_ROOT/clauver.sh"
+    if [[ -f "$clauver_file" ]]; then
+        if sed -i 's/^VERSION=".*"/VERSION="'"$version_no_prefix"'"/' "$clauver_file"; then
+            success "Updated VERSION in clauver.sh"
+        else
+            error "Failed to update VERSION in clauver.sh"
+            return 1
+        fi
+    else
+        error "clauver.sh not found at $clauver_file"
+        return 1
+    fi
+
+    # Update install.sh
+    local install_file="$PROJECT_ROOT/install.sh"
+    if [[ -f "$install_file" ]]; then
+        if sed -i 's/^VERSION=".*"/VERSION="'"$version_no_prefix"'"/' "$install_file"; then
+            success "Updated VERSION in install.sh"
+        else
+            error "Failed to update VERSION in install.sh"
+            return 1
+        fi
+    else
+        warn "install.sh not found at $install_file (skipping)"
+    fi
+
+    # Update README.md version badge
+    local readme_file="$PROJECT_ROOT/README.md"
+    if [[ -f "$readme_file" ]]; then
+        if sed -i 's/badge/version-[^)]*-blue/badge/version-'"$version_no_prefix"'-blue/' "$readme_file"; then
+            success "Updated version badge in README.md"
+        else
+            warn "Failed to update version badge in README.md (may need manual update)"
+        fi
+    else
+        warn "README.md not found at $readme_file (skipping)"
+    fi
+
+    success "Version numbers updated to $new_version"
+    log "Remember to commit these changes and create a git tag:"
+    log "  git add ."
+    log "  git commit -m \"chore: bump version to $version_no_prefix\""
+    log "  git tag $new_version"
+}
+
 # Main execution
 main() {
     parse_args "$@"
-    log "Starting release preparation for $VERSION"
-    validate_version "$VERSION"
-    check_git_state
-    check_dependencies
-    generate_checksums "$VERSION"
-    verify_checksums "$VERSION"
-    run_tests
 
-    # Create GitHub release if requested
-    if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
-        create_github_release "$VERSION"
-    fi
+    case "$COMMAND" in
+        update-version)
+            log "Starting version update to $VERSION"
+            validate_version "$VERSION"
+            compare_version_for_update "$VERSION"
+            update_version_files "$VERSION"
 
-    show_instructions "$VERSION"
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log "Dry run completed successfully"
+            else
+                success "Version update completed successfully!"
+            fi
+            ;;
+        release)
+            log "Starting release preparation for $VERSION"
+            validate_version "$VERSION"
+            check_git_state
+            check_dependencies
 
-    if [[ "$DRY_RUN" == "true" ]]; then
-        log "Dry run completed successfully"
-    else
-        success "Release preparation completed successfully!"
-    fi
+            # Handle auto-update mode for new versions
+            if [[ "$AUTO_UPDATE" == "true" ]]; then
+                log "Auto-update mode enabled: updating version files for new release"
+                update_version_files "$VERSION"
+            fi
+
+            generate_checksums "$VERSION"
+            verify_checksums "$VERSION"
+            run_tests
+
+            # Create GitHub release if requested
+            if [[ "$CREATE_GH_RELEASE" == "true" ]]; then
+                if [[ "$AUTO_UPDATE" == "true" ]]; then
+                    warn "Skipping GitHub release creation for new version without existing tag"
+                    warn "Please create the git tag first, then run release preparation again:"
+                    warn "  git add ."
+                    warn "  git commit -m \"chore: bump version to ${VERSION#v}\""
+                    warn "  git tag $VERSION"
+                    warn "  ./scripts/release-prepare.sh $VERSION --gh-release"
+                else
+                    create_github_release "$VERSION"
+                fi
+            fi
+
+            show_instructions "$VERSION"
+
+            if [[ "$DRY_RUN" == "true" ]]; then
+                log "Dry run completed successfully"
+            else
+                if [[ "$AUTO_UPDATE" == "true" ]]; then
+                    success "Release preparation completed successfully!"
+                    success "Version files updated. Don't forget to commit and create the git tag:"
+                    success "  git add ."
+                    success "  git commit -m \"chore: bump version to ${VERSION#v}\""
+                    success "  git tag $VERSION"
+                else
+                    success "Release preparation completed successfully!"
+                fi
+            fi
+            ;;
+        *)
+            error "Unknown command: $COMMAND"
+            show_help
+            exit 1
+            ;;
+    esac
 }
 
 # Run main function with all arguments
