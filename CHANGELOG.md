@@ -5,6 +5,43 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.11.2] - 2025-11-23
+
+### Security
+
+- **Critical security hardening** - Added comprehensive protection against command injection and path disclosure vulnerabilities
+- **Path sanitization** - Implemented robust input sanitization to prevent information disclosure in error messages
+- **SSRF protection** - Added Server-Side Request Forgery protection for URL validation to block internal network access
+- **Secure temporary file handling** - Enhanced temporary file creation with proper permissions and validation
+- **Safe environment loading** - Replaced unsafe `source()` calls with secure environment variable loading mechanisms
+- **Background process security** - Improved background process cleanup with PID validation and enhanced signal handling
+- **API key validation hardening** - Strengthened API key and URL validation against injection attacks
+- **Enhanced trap management** - Improved signal handling and process cleanup security
+
+### Added
+
+- **Comprehensive security test suite** - Added extensive security testing coverage with:
+  - Command injection prevention tests
+  - SSRF protection validation
+  - Secure temporary file handling tests
+  - Safe environment loading verification
+  - Background cleanup security tests
+  - Path sanitization validation
+  - Comprehensive secret validation tests
+  - Integration security testing
+- **New test files**:
+  - `test_security_hardening.sh` - 301 lines of comprehensive security tests
+  - Enhanced `test_security.sh` - 214 lines of additional security validations
+- **Enhanced test infrastructure** - Updated test framework to support security test categories
+
+### Fixed
+
+- **Command injection vulnerability** - Prevented command injection through malicious input validation
+- **Path disclosure vulnerability** - Sanitized error messages to prevent information disclosure
+- **Insecure temporary file creation** - Implemented secure temporary file handling with proper permissions
+- **Unsafe environment loading** - Replaced dangerous `source()` usage with secure alternatives
+- **Background process cleanup** - Fixed PID validation and enhanced process termination security
+
 ## [1.11.1] - 2025-11-23
 
 ### Security
