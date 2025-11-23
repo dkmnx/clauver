@@ -108,6 +108,273 @@ BANNER
   printf "%b" "${NC}"
 }
 
+# =============================================================================
+# VALIDATION MODULE: Input validation functions with consistent prefixes
+# =============================================================================
+
+validation_api_key() {
+  local key="$1"
+  local provider="$2"
+
+  # Basic validation - non-empty and reasonable length
+  if [ -z "$key" ]; then
+    ui_error "API key cannot be empty"
+    return 1
+  fi
+
+  # Check minimum length (most API keys are at least 20 chars)
+  if [ ${#key} -lt "$MIN_API_KEY_LENGTH" ]; then
+    ui_error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
+    return 1
+  fi
+
+  # Enhanced security validation - prevent ALL shell metacharacters
+  # Allow only alphanumeric, dot, underscore, hyphen, and common API key chars
+  if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    ui_error "API key contains invalid characters"
+    return 1
+  fi
+
+  # Additional security checks
+  # Reject any shell command patterns
+  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
+    if [[ "$key" == *"$pattern"* ]]; then
+      ui_error "API key contains prohibited shell pattern: $pattern"
+      return 1
+    fi
+  done
+
+  # Provider-specific validation
+  case "$provider" in
+    "zai")
+      if [[ ! "$key" =~ ^sk-test-[a-zA-Z0-9]+$ ]]; then
+        ui_error "Z.AI API key must start with 'sk-test-' and contain only alphanumeric characters"
+        return 1
+      fi
+      ;;
+    "minimax")
+      if [[ ! "$key" =~ ^[a-zA-Z0-9]+$ ]]; then
+        ui_error "MiniMax API key must contain only alphanumeric characters"
+        return 1
+      fi
+      ;;
+    "kimi")
+      if [[ ! "$key" =~ ^[a-zA-Z0-9-]+$ ]]; then
+        ui_error "Kimi API key must contain only alphanumeric characters and hyphens"
+        return 1
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+validation_url() {
+  local url="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$url" ]; then
+    ui_error "URL cannot be empty"
+    return 1
+  fi
+
+  # Check URL length (prevent DoS)
+  if [ ${#url} -gt 2048 ]; then
+    ui_error "URL too long (maximum 2048 characters)"
+    return 1
+  fi
+
+  # Basic URL format validation
+  if [[ ! "$url" =~ ^https?:// ]]; then
+    ui_error "URL must start with http:// or https://"
+    return 1
+  fi
+
+  # Security: Require HTTPS for external URLs
+  if [[ "$url" =~ ^http:// ]]; then
+    ui_error "HTTP URLs not allowed for security. Use HTTPS."
+    return 1
+  fi
+
+  # URL format validation using basic pattern matching
+  if [[ ! "$url" =~ ^https://[a-zA-Z0-9.-]+(\.[a-zA-Z]{2,})?(/.*)?$ ]]; then
+    ui_error "Invalid URL format"
+    return 1
+  fi
+
+  # Prevent localhost access (SSRF protection)
+  local host="${url#https://}"
+  host="${host%%/*}"
+  if [[ "$host" == "localhost" || "$host" == "127.0.0.1" || "$host" == "::1" ]]; then
+    ui_error "Localhost URLs not allowed for security"
+    return 1
+  fi
+
+  # Prevent private IP ranges
+  if [[ "$host" =~ ^10\. || "$host" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. || "$host" =~ ^192\.168\. ]]; then
+    ui_error "Private IP addresses not allowed for security"
+    return 1
+  fi
+
+  # Prevent link-local addresses
+  if [[ "$host" =~ ^169\.254\. ]]; then
+    ui_error "Link-local addresses not allowed for security"
+    return 1
+  fi
+
+  # Check for unsafe ports
+  local port=""
+  if [[ "$host" =~ :([0-9]+)$ ]]; then
+    port="${BASH_REMATCH[1]}"
+    # Block common privileged/system ports
+    case "$port" in
+      22|23|25|53|80|110|143|443|993|995|1433|3306|3389|5432|6379|27017)
+        ui_error "Port $port not allowed for security"
+        return 1
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
+validation_provider_name() {
+  local provider="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$provider" ]; then
+    ui_error "Provider name cannot be empty"
+    return 1
+  fi
+
+  # Format validation - allow only letters, numbers, underscores, and hyphens
+  if [[ ! "$provider" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    ui_error "Provider name can only contain letters, numbers, underscores, and hyphens"
+    return 1
+  fi
+
+  # Prevent reserved names
+  case "$provider" in
+    "anthropic"|"zai"|"minimax"|"kimi"|"deepseek"|"custom")
+      ui_error "Provider name '$provider' is reserved"
+      return 1
+      ;;
+  esac
+
+  # Length validation
+  if [ ${#provider} -gt 50 ]; then
+    ui_error "Provider name too long (maximum 50 characters)"
+    return 1
+  fi
+
+  return 0
+}
+
+validation_model_name() {
+  local model="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$model" ]; then
+    ui_error "Model name cannot be empty"
+    return 1
+  fi
+
+  # Security: Prevent shell injection attempts
+  if [[ "$model" =~ \$\(|\`|\$\{ ]]; then
+    ui_error "Model name contains dangerous characters that could be used for injection attacks"
+    return 1
+  fi
+
+  # Prevent command substitution patterns
+  if [[ "$model" =~ \$\(.*\) ]]; then
+    ui_error "Model name contains potential command substitution pattern"
+    return 1
+  fi
+
+  # Prevent quote characters that could break parsing
+  if [[ "$model" =~ [\"\'] ]]; then
+    ui_error "Model name contains quote characters that could break parsing"
+    return 1
+  fi
+
+  # Format validation - allow common model name characters
+  if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    ui_error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
+    return 1
+  fi
+
+  # Length validation
+  if [ ${#model} -gt 100 ]; then
+    ui_error "Model name too long (maximum 100 characters)"
+    return 1
+  fi
+
+  return 0
+}
+
+validation_decrypted_content() {
+  local content="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$content" ]; then
+    ui_error "Decrypted content is empty"
+    return 1
+  fi
+
+  # Security: Check for error indicators that suggest corrupted content
+  if [[ "$content" =~ (error|failed|invalid|corrupted) ]]; then
+    ui_error "Decrypted content contains error indicators - may be corrupted"
+    return 1
+  fi
+
+  # Enhanced security validation - prevent malicious code injection
+  # Check for common shell command patterns
+  if [[ "$content" =~ \$\(|\`|\$\{ ]]; then
+    ui_error "Decrypted content contains potentially malicious code"
+    return 1
+  fi
+
+  # Check for suspicious commands
+  if [[ "$content" =~ (rm\ -rf|chmod|chown|wget|curl|nc\ -) ]]; then
+    ui_error "Decrypted content contains potentially malicious commands"
+    return 1
+  fi
+
+  # Validate environment variable format (KEY=value pairs)
+  local line_num=0
+  while IFS= read -r line; do
+    line_num=$((line_num + 1))
+
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Check for valid environment variable format
+    if [[ ! "$line" =~ ^[A-Z_][A-Z0-9_]*=.*$ ]]; then
+      ui_error "Decrypted content contains invalid format on line $line_num: $line"
+      return 1
+    fi
+
+    # Extract key and value for additional validation
+    local key="${line%%=*}"
+    local value="${line#*=}"
+
+    # Validate key format
+    if [[ ! "$key" =~ ^[A-Z][A-Z0-9_]*$ ]]; then
+      ui_error "Invalid environment variable name on line $line_num: $key"
+      return 1
+    fi
+
+    # Security: Check value for dangerous patterns
+    if [[ "$value" =~ \$\(|\`|\$\{ ]]; then
+      ui_error "Decrypted content contains potentially malicious code in value on line $line_num: $key"
+      return 1
+    fi
+
+  done <<< "$content"
+
+  return 0
+}
+
 # Progress indicator for long-running operations
 show_progress() {
   local message="$1"
