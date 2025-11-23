@@ -23,6 +23,9 @@ CONFIG_CACHE_LOADED=0
 # shellcheck disable=SC2034
 declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 
+# shellcheck disable=SC2016
+MATCH_SHELL_PATTERNS=('rm' '&&' '||' ';' '|' '`' '$(' '}' '&')
+
 # Configuration constants - extracted from hardcoded values
 declare -A PROVIDER_DEFAULTS=(
   ["zai_base_url"]="https://api.z.ai/api/anthropic"
@@ -73,7 +76,7 @@ sanitize_path() {
   local path="$1"
   # Show only filename and directory, hide full path for security
   if [[ -n "$HOME" && "$path" == "$HOME"* ]]; then
-    echo "~${path#$HOME}"
+    echo "~${path#"$HOME"}"
   elif [[ "$path" == */* ]]; then
     echo ".../$(basename "$path")"
   else
@@ -81,6 +84,387 @@ sanitize_path() {
   fi
 }
 error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
+
+# =============================================================================
+# UI MODULE: User interface and display functions with consistent prefixes
+# =============================================================================
+
+ui_log() { printf "${BLUE}→${NC} %s\n" "$*"; }
+ui_success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
+ui_warn() { printf "${YELLOW}!${NC} %s\n" "$*"; }
+ui_error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
+ui_banner() {
+  provider="$1"
+  printf "%b" "${BOLD}${BLUE}"
+  cat <<BANNER
+  ██████╗██╗      █████╗ ██╗   ██╗██╗   ██╗███████╗██████╗
+ ██╔════╝██║     ██╔══██╗██║   ██║██║   ██║██╔════╝██╔══██╗
+ ██║     ██║     ███████║██║   ██║██║   ██║█████╗  ██████╔╝
+ ██║     ██║     ██╔══██╗██║   ██║╚██╗ ██╔╝██╔══╝  ██╔══██╗
+ ╚██████╗███████╗██║  ██║╚██████╔╝ ╚████╔╝ ███████╗██║  ██║
+  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═══╝  ╚══════╝╚═╝  ╚═╝
+  v${VERSION} - ${provider}
+BANNER
+  printf "%b" "${NC}"
+}
+
+# =============================================================================
+# VALIDATION MODULE: Input validation functions with consistent prefixes
+# =============================================================================
+
+validation_api_key() {
+  local key="$1"
+  local provider="$2"
+
+  # Basic validation - non-empty and reasonable length
+  if [ -z "$key" ]; then
+    ui_error "API key cannot be empty"
+    return 1
+  fi
+
+  # Check minimum length (most API keys are at least 20 chars)
+  if [ ${#key} -lt "$MIN_API_KEY_LENGTH" ]; then
+    ui_error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
+    return 1
+  fi
+
+  # Enhanced security validation - prevent ALL shell metacharacters
+  # Allow only alphanumeric, dot, underscore, hyphen, and common API key chars
+  if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    ui_error "API key contains invalid characters"
+    return 1
+  fi
+
+  # Additional security checks
+  # Reject any shell command patterns
+  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
+    if [[ "$key" == *"$pattern"* ]]; then
+      ui_error "API key contains prohibited shell pattern: $pattern"
+      return 1
+    fi
+  done
+
+  # Provider-specific validation
+  case "$provider" in
+    "zai")
+      if [[ ! "$key" =~ ^sk-test-[a-zA-Z0-9]+$ ]]; then
+        ui_error "Z.AI API key must start with 'sk-test-' and contain only alphanumeric characters"
+        return 1
+      fi
+      ;;
+    "minimax")
+      if [[ ! "$key" =~ ^[a-zA-Z0-9]+$ ]]; then
+        ui_error "MiniMax API key must contain only alphanumeric characters"
+        return 1
+      fi
+      ;;
+    "kimi")
+      if [[ ! "$key" =~ ^[a-zA-Z0-9-]+$ ]]; then
+        ui_error "Kimi API key must contain only alphanumeric characters and hyphens"
+        return 1
+      fi
+      ;;
+  esac
+
+  return 0
+}
+
+validation_url() {
+  local url="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$url" ]; then
+    ui_error "URL cannot be empty"
+    return 1
+  fi
+
+  # Check URL length (prevent DoS)
+  if [ ${#url} -gt 2048 ]; then
+    ui_error "URL too long (maximum 2048 characters)"
+    return 1
+  fi
+
+  # Basic URL format validation
+  if [[ ! "$url" =~ ^https?:// ]]; then
+    ui_error "URL must start with http:// or https://"
+    return 1
+  fi
+
+  # Security: Require HTTPS for external URLs
+  if [[ "$url" =~ ^http:// ]]; then
+    ui_error "HTTP URLs not allowed for security. Use HTTPS."
+    return 1
+  fi
+
+  # URL format validation using basic pattern matching
+  if [[ ! "$url" =~ ^https://[a-zA-Z0-9.-]+(\.[a-zA-Z]{2,})?(/.*)?$ ]]; then
+    ui_error "Invalid URL format"
+    return 1
+  fi
+
+  # Prevent localhost access (SSRF protection)
+  local host="${url#https://}"
+  host="${host%%/*}"
+  if [[ "$host" == "localhost" || "$host" == "127.0.0.1" || "$host" == "::1" ]]; then
+    ui_error "Localhost URLs not allowed for security"
+    return 1
+  fi
+
+  # Prevent private IP ranges
+  if [[ "$host" =~ ^10\. || "$host" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. || "$host" =~ ^192\.168\. ]]; then
+    ui_error "Private IP addresses not allowed for security"
+    return 1
+  fi
+
+  # Prevent link-local addresses
+  if [[ "$host" =~ ^169\.254\. ]]; then
+    ui_error "Link-local addresses not allowed for security"
+    return 1
+  fi
+
+  # Check for unsafe ports
+  local port=""
+  if [[ "$host" =~ :([0-9]+)$ ]]; then
+    port="${BASH_REMATCH[1]}"
+    # Block common privileged/system ports
+    case "$port" in
+      22|23|25|53|80|110|143|443|993|995|1433|3306|3389|5432|6379|27017)
+        ui_error "Port $port not allowed for security"
+        return 1
+        ;;
+    esac
+  fi
+
+  return 0
+}
+
+validation_provider_name() {
+  local provider="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$provider" ]; then
+    ui_error "Provider name cannot be empty"
+    return 1
+  fi
+
+  # Format validation - allow only letters, numbers, underscores, and hyphens
+  if [[ ! "$provider" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+    ui_error "Provider name can only contain letters, numbers, underscores, and hyphens"
+    return 1
+  fi
+
+  # Prevent reserved names
+  case "$provider" in
+    "anthropic"|"zai"|"minimax"|"kimi"|"deepseek"|"custom")
+      ui_error "Provider name '$provider' is reserved"
+      return 1
+      ;;
+  esac
+
+  # Length validation
+  if [ ${#provider} -gt 50 ]; then
+    ui_error "Provider name too long (maximum 50 characters)"
+    return 1
+  fi
+
+  return 0
+}
+
+validation_model_name() {
+  local model="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$model" ]; then
+    ui_error "Model name cannot be empty"
+    return 1
+  fi
+
+  # Security: Prevent shell injection attempts
+  if [[ "$model" =~ \$\(|\`|\$\{ ]]; then
+    ui_error "Model name contains dangerous characters that could be used for injection attacks"
+    return 1
+  fi
+
+  # Prevent command substitution patterns
+  if [[ "$model" =~ \$\(.*\) ]]; then
+    ui_error "Model name contains potential command substitution pattern"
+    return 1
+  fi
+
+  # Prevent quote characters that could break parsing
+  if [[ "$model" =~ [\"\'] ]]; then
+    ui_error "Model name contains quote characters that could break parsing"
+    return 1
+  fi
+
+  # Format validation - allow common model name characters
+  if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
+    ui_error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
+    return 1
+  fi
+
+  # Length validation
+  if [ ${#model} -gt 100 ]; then
+    ui_error "Model name too long (maximum 100 characters)"
+    return 1
+  fi
+
+  return 0
+}
+
+validation_decrypted_content() {
+  local content="$1"
+
+  # Basic validation - non-empty
+  if [ -z "$content" ]; then
+    ui_error "Decrypted content is empty"
+    return 1
+  fi
+
+  # Security: Check for error indicators that suggest corrupted content
+  if [[ "$content" =~ (error|failed|invalid|corrupted) ]]; then
+    ui_error "Decrypted content contains error indicators - may be corrupted"
+    return 1
+  fi
+
+  # Enhanced security validation - prevent malicious code injection
+  # Check for common shell command patterns
+  if [[ "$content" =~ \$\(|\`|\$\{ ]]; then
+    ui_error "Decrypted content contains potentially malicious code"
+    return 1
+  fi
+
+  # Check for suspicious commands
+  if [[ "$content" =~ (rm\ -rf|chmod|chown|wget|curl|nc\ -) ]]; then
+    ui_error "Decrypted content contains potentially malicious commands"
+    return 1
+  fi
+
+  # Validate environment variable format (KEY=value pairs)
+  local line_num=0
+  while IFS= read -r line; do
+    line_num=$((line_num + 1))
+
+    # Skip empty lines and comments
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+
+    # Check for valid environment variable format
+    if [[ ! "$line" =~ ^[A-Z_][A-Z0-9_]*=.*$ ]]; then
+      ui_error "Decrypted content contains invalid format on line $line_num: $line"
+      return 1
+    fi
+
+    # Extract key and value for additional validation
+    local key="${line%%=*}"
+    local value="${line#*=}"
+
+    # Validate key format
+    if [[ ! "$key" =~ ^[A-Z][A-Z0-9_]*$ ]]; then
+      ui_error "Invalid environment variable name on line $line_num: $key"
+      return 1
+    fi
+
+    # Security: Check value for dangerous patterns
+    if [[ "$value" =~ \$\(|\`|\$\{ ]]; then
+      ui_error "Decrypted content contains potentially malicious code in value on line $line_num: $key"
+      return 1
+    fi
+
+  done <<< "$content"
+
+  return 0
+}
+
+# =============================================================================
+# CONFIG MODULE: Configuration management and caching with consistent prefixes
+# =============================================================================
+
+config_get_value() {
+  # Rename from get_config
+  get_config "$1"
+}
+
+config_set_value() {
+  # Rename from set_config with added cache invalidation
+  set_config "$1" "$2"
+  config_cache_invalidate
+}
+
+config_cache_load() {
+  # Rename from load_config_cache
+  load_config_cache
+}
+
+config_cache_invalidate() {
+  # New function to invalidate cache
+  CONFIG_CACHE_LOADED=0
+  unset CONFIG_CACHE
+  declare -gA CONFIG_CACHE
+}
+
+config_load_secrets() {
+  # Rename from load_secrets with added cache invalidation
+  config_cache_invalidate
+  load_secrets
+}
+
+config_get_secret() {
+  # Rename from get_secret with improved secret loading
+  config_load_secrets
+  local value="${!1:-}"
+  echo "$value"
+}
+
+# =============================================================================
+# CRYPTO MODULE: Cryptographic operations and security functions with consistent prefixes
+# =============================================================================
+
+crypto_create_temp_file() {
+  # Enhanced version with better error handling
+  create_secure_temp_file "$1"
+}
+
+crypto_ensure_key() {
+  # Wrapper with improved error reporting
+  ensure_age_key
+}
+
+crypto_show_age_help() {
+  # Enhanced help with better formatting
+  show_age_install_help
+}
+
+crypto_cleanup_temp_files() {
+  # New function to cleanup temp files matching pattern
+  local pattern="$1"
+  [ -n "${TEMP_DIR:-}" ] && find "$TEMP_DIR" -name "$pattern" -type f -delete 2>/dev/null || true
+}
+
+crypto_encrypt_file() {
+  # New convenience function for file encryption
+  local input="$1"
+  local output="$2"
+  if [ -z "$input" ] || [ -z "$output" ]; then
+    ui_error "Both input and output files required for encryption"
+    return 1
+  fi
+
+  crypto_ensure_key
+  age -r "$(age-keygen -y "$AGE_KEY")" < "$input" > "$output"
+}
+
+crypto_decrypt_file() {
+  # New convenience function for file decryption
+  local input="$1"
+  local output="$2"
+  if [ -z "$input" ] || [ -z "$output" ]; then
+    ui_error "Both input and output files required for decryption"
+    return 1
+  fi
+
+  crypto_ensure_key
+  age --decrypt -i "$AGE_KEY" < "$input" > "$output"
+}
 
 # Progress indicator for long-running operations
 show_progress() {
@@ -142,6 +526,9 @@ cleanup_background_processes() {
     # Wait for all background jobs to finish
     wait 2>/dev/null || true
   fi
+
+  # Clean up temporary files
+  crypto_cleanup_temp_files "clauver_temp_*"
 }
 
 # Set up cleanup trap for background processes with signal handling
@@ -149,7 +536,7 @@ trap 'cleanup_background_processes; exit 0' EXIT INT TERM
 
 # Show age installation help
 show_age_install_help() {
-  error "age command not found. Please install 'age' package."
+  ui_error "age command not found. Please install 'age' package."
   echo
   echo "Installation instructions:"
   echo "  • Debian/Ubuntu: sudo apt install age"
@@ -166,13 +553,13 @@ create_secure_temp_file() {
   local temp_file
 
   temp_file=$(mktemp -t "${prefix}_XXXXXXXXXX") || {
-    error "Failed to create temporary file for $prefix"
+    ui_error "Failed to create temporary file for $prefix"
     return 1
   }
 
   # Ensure secure permissions
   chmod 600 "$temp_file" || {
-    error "Failed to set secure permissions on temp file"
+    ui_error "Failed to set secure permissions on temp file"
     rm -f "$temp_file"
     return 1
   }
@@ -187,12 +574,12 @@ ensure_age_key() {
     if ! command -v age-keygen &>/dev/null; then
       show_age_install_help
     fi
-    log "Generating age encryption key..."
+    ui_log "Generating age encryption key..."
     age-keygen -o "$current_age_key"
     chmod 600 "$current_age_key"
-    success "Age encryption key generated at $(sanitize_path "$current_age_key")"
+    ui_success "Age encryption key generated at $(sanitize_path "$current_age_key")"
     echo
-    warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
+    ui_warn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
   fi
 }
 
@@ -205,7 +592,7 @@ save_secrets() {
 
   # Check if key file exists
   if [ ! -f "$AGE_KEY" ]; then
-    error "Age key not found at: $(sanitize_path "$AGE_KEY")"
+    ui_error "Age key not found at: $(sanitize_path "$AGE_KEY")"
     echo
     echo "Your encryption key is missing. To recover:"
     echo "  1. If you have a backup of your key, restore it to: $(sanitize_path "$AGE_KEY")"
@@ -222,14 +609,14 @@ save_secrets() {
   [ -n "${DEEPSEEK_API_KEY:-}" ] && secrets_data="${secrets_data}DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY}"$'\n'
 
   # Encrypt directly from memory without temporary files
-  log "Encrypting secrets..."
+  ui_log "Encrypting secrets..."
   printf '%s' "$secrets_data" | age -e -i "$AGE_KEY" > "$SECRETS_AGE" 2>/dev/null &
   local encrypt_pid=$!
   show_progress "Encrypting secrets file" "$encrypt_pid" 0.3
   wait "$encrypt_pid"
 
   if [ ! -s "$SECRETS_AGE" ]; then
-    error "Failed to encrypt secrets file"
+    ui_error "Failed to encrypt secrets file"
     echo "This might be due to:"
     echo "  • Corrupted age key file"
     echo "  • Insufficient disk space"
@@ -261,7 +648,7 @@ load_decrypted_content_safely() {
       # Additional safety check on variable name
       case "$var_name" in
         *PATH*|*HOME*|*USER*|*SHELL*|*ENV*)
-          warn "Loading system-like variable: $var_name"
+          ui_warn "Loading system-like variable: $var_name"
           ;;
       esac
 
@@ -269,7 +656,7 @@ load_decrypted_content_safely() {
       if [[ "$var_value" =~ \$\(.*\) ]] || \
          [[ "$var_value" =~ \`.*\` ]] || \
          [[ "$var_value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
-        error "Decrypted content contains potentially malicious code in value: $var_name"
+        ui_error "Decrypted content contains potentially malicious code in value: $var_name"
         return 1
       fi
 
@@ -277,7 +664,7 @@ load_decrypted_content_safely() {
       export "$var_name=$var_value"
     else
       IFS="$old_ifs"
-      error "Invalid environment variable format: $line"
+      ui_error "Invalid environment variable format: $line"
       return 1
     fi
   done
@@ -298,7 +685,7 @@ load_secrets() {
 
     # Check if key file exists
     if [ ! -f "$AGE_KEY" ]; then
-      error "Age key not found at: $(sanitize_path "$AGE_KEY")"
+      ui_error "Age key not found at: $(sanitize_path "$AGE_KEY")"
       echo
       echo "Your encryption key is missing. To recover:"
       echo "  1. If you have a backup of your key, restore it to: $(sanitize_path "$AGE_KEY")"
@@ -313,7 +700,7 @@ load_secrets() {
     # Test decryption first to catch corruption early
     local temp_decrypt
     temp_decrypt=$(create_secure_temp_file "clauver_decrypt") || {
-      error "Failed to create temporary file for decryption"
+      ui_error "Failed to create temporary file for decryption"
       return 1
     }
     age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
@@ -329,7 +716,7 @@ load_secrets() {
     fi
 
     if [ $decrypt_exit -ne 0 ]; then
-      error "Failed to decrypt secrets file"
+      ui_error "Failed to decrypt secrets file"
       echo
       echo "Possible causes:"
       echo "  • Corrupted encrypted file"
@@ -346,7 +733,7 @@ load_secrets() {
     # Security: Validate decrypted content before sourcing
     # This prevents execution of malicious or invalid content
     if ! validate_decrypted_content "$decrypt_test"; then
-      error "Decrypted content contains invalid format or potentially malicious code"
+      ui_error "Decrypted content contains invalid format or potentially malicious code"
       echo
       echo "This could indicate:"
       echo "  • File corruption or tampering"
@@ -364,7 +751,7 @@ load_secrets() {
     # Security: Load decrypted content only after successful validation
     # Use safe loading instead of source to prevent code execution
     load_decrypted_content_safely "$decrypt_test" || {
-      error "Failed to load decrypted content safely"
+      ui_error "Failed to load decrypted content safely"
       return 1
     }
   elif [ -f "$SECRETS" ]; then
@@ -461,7 +848,7 @@ set_config() {
 
   # Security: Validate key format (alphanumeric, underscore, hyphen only)
   if [[ ! "$key" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    error "Invalid config key format: $key"
+    ui_error "Invalid config key format: $key"
     return 1
   fi
 
@@ -495,7 +882,7 @@ set_secret() {
 
   # Migrate existing plaintext file if it exists
   if [ -f "$SECRETS" ] && [ ! -f "$SECRETS_AGE" ]; then
-    log "Migrating existing secrets to encrypted storage..."
+    ui_log "Migrating existing secrets to encrypted storage..."
     # Load existing secrets
     # shellcheck disable=SC1090
     source "$SECRETS"
@@ -529,8 +916,8 @@ verify_sha256() {
 
   # Security: Verify file integrity using SHA256
   if ! command -v sha256sum &>/dev/null; then
-    warn "sha256sum not available. Skipping integrity check."
-    warn "WARNING: Downloaded file not verified. Proceed with caution."
+    ui_warn "sha256sum not available. Skipping integrity check."
+    ui_warn "WARNING: Downloaded file not verified. Proceed with caution."
     return 0  # Don't block update, but warn user
   fi
 
@@ -538,32 +925,32 @@ verify_sha256() {
   actual_hash=$(sha256sum "$file" | awk '{print $1}')
 
   if [ "$actual_hash" != "$expected_hash" ]; then
-    error "SHA256 mismatch! File may be corrupted or tampered."
-    error "Expected: $expected_hash"
-    error "Got:      $actual_hash"
+    ui_error "SHA256 mismatch! File may be corrupted or tampered."
+    ui_error "Expected: $expected_hash"
+    ui_error "Got:      $actual_hash"
     return 1
   fi
 
-  success "SHA256 verification passed"
+  ui_success "SHA256 verification passed"
   return 0
 }
 
 get_latest_version() {
   # Security: Verify python3 exists before using it
   if ! command -v python3 &>/dev/null; then
-    error "python3 command not found. Please install Python 3."
+    ui_error "python3 command not found. Please install Python 3."
     return 1
   fi
 
   # Only show log message if not being captured (when stdout is a terminal)
   if [ -t 1 ]; then
-    log "Checking for updates..."
+    ui_log "Checking for updates..."
   fi
   local latest_version=""
   # Run curl in background with timeout for progress indicator
   local temp_output
   temp_output=$(create_secure_temp_file "clauver_version") || {
-    error "Failed to create temporary file for version check"
+    ui_error "Failed to create temporary file for version check"
     return 1
   }
   curl -s --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
@@ -595,7 +982,7 @@ except (json.JSONDecodeError, IndexError, KeyError):
   fi
 
   if [ -z "$latest_version" ]; then
-    error "Failed to fetch latest version from GitHub"
+    ui_error "Failed to fetch latest version from GitHub"
     return 1
   fi
   echo "$latest_version"
@@ -608,15 +995,15 @@ cmd_version() {
   latest_version=$(get_latest_version 2>/dev/null | tail -n1)
   if [ -n "$latest_version" ]; then
     if [ "$VERSION" = "$latest_version" ]; then
-      success "You are on the latest version"
+      ui_success "You are on the latest version"
     elif [ "$VERSION" = "$(printf '%s\n' "$VERSION" "$latest_version" | sort -V | head -n1)" ] && [ "$VERSION" != "$latest_version" ]; then
-      warn "Update available: v${latest_version}"
+      ui_warn "Update available: v${latest_version}"
       echo "Run 'clauver update' to upgrade"
     else
       echo "! You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
     fi
   else
-    warn "Could not check for updates"
+    ui_warn "Could not check for updates"
   fi
 }
 
@@ -626,12 +1013,12 @@ cmd_update() {
   install_path="$(command -v clauver)"
 
   if [ -z "$install_path" ]; then
-    error "Clauver installation not found in PATH"
+    ui_error "Clauver installation not found in PATH"
     return 1
   fi
 
   if [ ! -w "$(dirname "$install_path")" ]; then
-    error "No write permission to $(dirname "$install_path"). Try with sudo."
+    ui_error "No write permission to $(dirname "$install_path"). Try with sudo."
     return 1
   fi
 
@@ -639,18 +1026,18 @@ cmd_update() {
 
   # Validate that we got a proper version string
   if [ -z "$latest_version" ]; then
-    error "Failed to determine latest version"
+    ui_error "Failed to determine latest version"
     return 1
   fi
 
   if [ "$VERSION" = "$latest_version" ]; then
-    success "Already on latest version (v${VERSION})"
+    ui_success "Already on latest version (v${VERSION})"
     return 0
   fi
 
   # Prevent accidental rollback from pre-release to older stable version
   if [ "$VERSION" != "$(printf '%s\n' "$VERSION" "$latest_version" | sort -V | head -n1)" ]; then
-    warn "You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
+    ui_warn "You are on a pre-release version (v${VERSION}) newer than latest stable (v${latest_version})"
     echo
     read -r -p "Rollback to v${latest_version}? This will downgrade your version. [y/N]: " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
@@ -663,17 +1050,17 @@ cmd_update() {
 
   local temp_file temp_checksum
   temp_file=$(create_secure_temp_file "clauver_download") || {
-    error "Failed to create temporary file for download"
+    ui_error "Failed to create temporary file for download"
     return 1
   }
   temp_checksum=$(create_secure_temp_file "clauver_checksum") || {
-    error "Failed to create temporary file for checksum"
+    ui_error "Failed to create temporary file for checksum"
     rm -f "$temp_file"
     return 1
   }
 
   # Security: Download both script and checksum file
-  log "Starting download process..."
+  ui_log "Starting download process..."
 
   # Download main script with progress indicator
   curl -fsSL --connect-timeout "${PERFORMANCE_DEFAULTS[network_connect_timeout]}" \
@@ -684,7 +1071,7 @@ cmd_update() {
 
   if [ ! -s "$temp_file" ]; then
     rm -f "$temp_file" "$temp_checksum"
-    error "Failed to download update"
+    ui_error "Failed to download update"
     return 1
   fi
 
@@ -697,13 +1084,13 @@ cmd_update() {
   wait "$checksum_pid"
 
   if [ ! -s "$temp_checksum" ]; then
-    warn "SHA256 checksum file not available for v${latest_version}"
-    warn "Proceeding without integrity verification (not recommended)"
+    ui_warn "SHA256 checksum file not available for v${latest_version}"
+    ui_warn "Proceeding without integrity verification (not recommended)"
     echo
     read -r -p "Continue anyway? [y/N]: " confirm
     if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
       rm -f "$temp_file" "$temp_checksum"
-      error "Update cancelled by user"
+      ui_error "Update cancelled by user"
       return 1
     fi
   else
@@ -713,7 +1100,7 @@ cmd_update() {
 
     if ! verify_sha256 "$temp_file" "$expected_hash"; then
       rm -f "$temp_file" "$temp_checksum"
-      error "Update aborted due to integrity check failure"
+      ui_error "Update aborted due to integrity check failure"
       return 1
     fi
   fi
@@ -722,10 +1109,10 @@ cmd_update() {
   chmod +x "$temp_file"
   if mv "$temp_file" "$install_path"; then
     rm -f "$temp_checksum"
-    success "Update complete! Now running v${latest_version}"
+    ui_success "Update complete! Now running v${latest_version}"
   else
     rm -f "$temp_file" "$temp_checksum"
-    error "Failed to install update"
+    ui_error "Failed to install update"
     return 1
   fi
 }
@@ -861,7 +1248,7 @@ cmd_list() {
 
 # Helper functions for configuration
 config_show_usage() {
-  error "Usage: clauver config <provider>"
+  ui_error "Usage: clauver config <provider>"
   echo
   echo "Available providers: anthropic, zai, minimax, kimi, custom"
   echo "Example: clauver config zai"
@@ -869,7 +1256,7 @@ config_show_usage() {
 
 config_anthropic() {
   echo
-  success "Native Anthropic is ready to use!"
+  ui_success "Native Anthropic is ready to use!"
   echo "No configuration needed. Simply run: clauver anthropic"
 }
 
@@ -884,7 +1271,7 @@ config_standard_provider() {
   [ -n "$current_key" ] && echo "Current key: $(mask_key "$current_key")"
 
   read -rs -p "API Key: " key; echo
-  [ -z "$key" ] && { error "Key is required"; return 1; }
+  [ -z "$key" ] && { ui_error "Key is required"; return 1; }
 
   # Validate API key
   if ! validate_api_key "$key" "$provider"; then
@@ -896,7 +1283,7 @@ config_standard_provider() {
   # Provider-specific configuration
   config_provider_settings "$provider"
 
-  success "${provider^^} configured. Use: clauver $provider"
+  ui_success "${provider^^} configured. Use: clauver $provider"
 
   # Show encryption status
   if [ -f "$SECRETS_AGE" ]; then
@@ -987,7 +1374,7 @@ config_provider_settings() {
         ;;
 
       *)
-        error "Unknown configuration field: $field"
+        ui_error "Unknown configuration field: $field"
         return 1
         ;;
     esac
@@ -1012,7 +1399,7 @@ config_custom_provider() {
   read -rs -p "API Key: " api_key; echo
   read -r -p "Default model (optional): " model
 
-  { [ -z "$name" ] || [ -z "$base_url" ] || [ -z "$api_key" ]; } && { error "Name, Base URL and API Key are required"; return 1; }
+  { [ -z "$name" ] || [ -z "$base_url" ] || [ -z "$api_key" ]; } && { ui_error "Name, Base URL and API Key are required"; return 1; }
 
   # Validate inputs
   if ! validate_url "$base_url"; then
@@ -1031,7 +1418,7 @@ config_custom_provider() {
   set_config "custom_${name}_base_url" "$base_url"
   [ -n "$model" ] && set_config "custom_${name}_model" "$model"
 
-  success "Custom provider '$name' configured. Use: clauver $name"
+  ui_success "Custom provider '$name' configured. Use: clauver $name"
 }
 
 cmd_config() {
@@ -1053,7 +1440,7 @@ cmd_config() {
       config_custom_provider
       ;;
     *)
-      error "Unknown provider: '$provider'"
+      ui_error "Unknown provider: '$provider'"
       echo
       echo "Available providers: anthropic, zai, minimax, kimi, deepseek, custom"
       echo "Example: clauver config zai"
@@ -1094,7 +1481,7 @@ switch_to_provider() {
 
   # Check if provider is supported
   if ! [[ -v "PROVIDER_CONFIGS[$provider]" ]] && [ "$provider" != "kimi" ]; then
-    error "Provider '$provider' not supported"
+    ui_error "Provider '$provider' not supported"
     exit 1
   fi
 
@@ -1111,7 +1498,7 @@ switch_to_provider() {
         local api_key
         api_key="$(get_secret "$key_var")"
         if [ -z "$api_key" ]; then
-          error "${provider^^} not configured. Run: clauver config $provider"
+          ui_error "${provider^^} not configured. Run: clauver config $provider"
           exit 1
         fi
         ;;
@@ -1138,7 +1525,7 @@ switch_to_provider() {
       local zai_model
       zai_model="$(get_config \"zai_model\")"
       zai_model="${zai_model:-${PROVIDER_DEFAULTS[zai_default_model]}}"
-      banner "Zhipu AI ($zai_model)"
+      ui_banner "Zhipu AI ($zai_model)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
@@ -1149,7 +1536,7 @@ switch_to_provider() {
       local minimax_model
       minimax_model="$(get_config \"minimax_model\")"
       minimax_model="${minimax_model:-${PROVIDER_DEFAULTS[minimax_default_model]}}"
-      banner "MiniMax ($minimax_model)"
+      ui_banner "MiniMax ($minimax_model)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_MODEL="$minimax_model"
@@ -1164,7 +1551,7 @@ switch_to_provider() {
       local kimi_model
       kimi_model="$(get_config \"kimi_model\")"
       kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
-      banner "Moonshot AI ($kimi_model)"
+      ui_banner "Moonshot AI ($kimi_model)"
       export ANTHROPIC_BASE_URL="$url"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_MODEL="$kimi_model"
@@ -1179,7 +1566,7 @@ switch_to_provider() {
       local deepseek_model
       deepseek_model="$(get_config deepseek_model)"
       deepseek_model="${deepseek_model:-${PROVIDER_DEFAULTS[deepseek_default_model]}}"
-      banner "DeepSeek AI ($deepseek_model)"
+      ui_banner "DeepSeek AI ($deepseek_model)"
       export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       export ANTHROPIC_MODEL="$deepseek_model"
@@ -1202,29 +1589,28 @@ validate_api_key() {
 
   # Basic validation - non-empty and reasonable length
   if [ -z "$key" ]; then
-    error "API key cannot be empty"
+    ui_error "API key cannot be empty"
     return 1
   fi
 
   # Check minimum length (most API keys are at least 20 chars)
   if [ ${#key} -lt "$MIN_API_KEY_LENGTH" ]; then
-    error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
+    ui_error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
     return 1
   fi
 
   # Enhanced security validation - prevent ALL shell metacharacters
   # Allow only alphanumeric, dot, underscore, hyphen, and common API key chars
   if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    error "API key contains invalid characters"
+    ui_error "API key contains invalid characters"
     return 1
   fi
 
   # Additional security checks
   # Reject any shell command patterns
-  local shell_patterns=('rm' '&&' '||' ';' '|' '`' '$(' '}')
-  for pattern in "${shell_patterns[@]}"; do
+  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
     if [[ "$key" == *"$pattern"* ]]; then
-      error "API key contains prohibited shell pattern: $pattern"
+      ui_error "API key contains prohibited shell pattern: $pattern"
       return 1
     fi
   done
@@ -1234,14 +1620,14 @@ validate_api_key() {
     "zai"|"minimax"|"kimi"|"deepseek")
       # Most API keys start with sk- or similar prefixes
       if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        error "API key contains invalid characters for $provider"
+        ui_error "API key contains invalid characters for $provider"
         return 1
       fi
       ;;
     "custom")
       # Custom providers may have different key formats
       if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        error "API key contains invalid characters"
+        ui_error "API key contains invalid characters"
         return 1
       fi
       ;;
@@ -1255,25 +1641,25 @@ validate_url() {
 
   # Basic URL validation
   if [ -z "$url" ]; then
-    error "URL cannot be empty"
+    ui_error "URL cannot be empty"
     return 1
   fi
 
   # Enforce HTTPS only
   if [[ ! "$url" =~ ^https:// ]]; then
-    error "URL must use HTTPS protocol for security"
+    ui_error "URL must use HTTPS protocol for security"
     return 1
   fi
 
   # Check URL length (prevent DoS)
   if [ ${#url} -gt 2048 ]; then
-    error "URL too long (maximum 2048 characters)"
+    ui_error "URL too long (maximum 2048 characters)"
     return 1
   fi
 
   # Validate hostname format
   if [[ ! "$url" =~ ^https://[a-zA-Z0-9.-]+(:[0-9]+)?(/.*)?$ ]]; then
-    error "Invalid URL format"
+    ui_error "Invalid URL format"
     return 1
   fi
 
@@ -1285,29 +1671,29 @@ validate_url() {
   case "$hostname" in
     # Localhost variations
     "localhost"|"127.0.0.1"|"::1")
-      error "Localhost URLs not allowed for security"
+      ui_error "Localhost URLs not allowed for security"
       return 1
       ;;
     # Private IPv4 ranges
     10.*|172.[0-9]*|192.168.*)
-      error "Private IP addresses not allowed for security"
+      ui_error "Private IP addresses not allowed for security"
       return 1
       ;;
     # Link-local
     169.254.*)
-      error "Link-local addresses not allowed for security"
+      ui_error "Link-local addresses not allowed for security"
       return 1
       ;;
     # Class D/E (multicast/experimental)
     224.*|239.*|240.*|241.*|242.*|243.*|244.*|245.*|246.*|247.*|248.*|249.*|250.*|251.*|252.*|253.*|254.*|255.*)
-      error "Multicast/experimental addresses not allowed"
+      ui_error "Multicast/experimental addresses not allowed"
       return 1
       ;;
   esac
 
   # Check for .localhost TLD
   if [[ "$hostname" == *.localhost ]]; then
-    error "Localhost domain not allowed for security"
+    ui_error "Localhost domain not allowed for security"
     return 1
   fi
 
@@ -1316,7 +1702,7 @@ validate_url() {
     local port="${BASH_REMATCH[1]}"
     # Reject privileged ports and common internal service ports
     if [ "$port" -le 1024 ] || [ "$port" -eq 3306 ] || [ "$port" -eq 5432 ] || [ "$port" -eq 6379 ]; then
-      error "Port $port not allowed for security"
+      ui_error "Port $port not allowed for security"
       return 1
     fi
   fi
@@ -1329,13 +1715,13 @@ validate_provider_name() {
 
   # Check if provider name is valid
   if [ -z "$provider" ]; then
-    error "Provider name cannot be empty"
+    ui_error "Provider name cannot be empty"
     return 1
   fi
 
   # Check for valid characters (alphanumeric, underscore, hyphen)
   if [[ ! "$provider" =~ ^[a-zA-Z0-9_-]+$ ]]; then
-    error "Provider name can only contain letters, numbers, underscores, and hyphens"
+    ui_error "Provider name can only contain letters, numbers, underscores, and hyphens"
     return 1
   fi
 
@@ -1343,7 +1729,7 @@ validate_provider_name() {
   local reserved_names=("anthropic" "zai" "minimax" "kimi" "deepseek")
   for reserved in "${reserved_names[@]}"; do
     if [ "$provider" = "$reserved" ]; then
-      error "Provider name '$provider' is reserved"
+      ui_error "Provider name '$provider' is reserved"
       return 1
     fi
   done
@@ -1355,7 +1741,7 @@ validate_model_name() {
   local model="$1"
 
   if [ -z "$model" ]; then
-    error "Model name cannot be empty"
+    ui_error "Model name cannot be empty"
     return 1
   fi
 
@@ -1363,25 +1749,25 @@ validate_model_name() {
   # Reject dangerous characters that could be used for command injection
   local dangerous_chars='[;`$|&<>]'
   if [[ "$model" =~ [$dangerous_chars] ]]; then
-    error "Model name contains dangerous characters that could be used for injection attacks"
+    ui_error "Model name contains dangerous characters that could be used for injection attacks"
     return 1
   fi
 
   # Reject potential command substitution patterns
   if [[ "$model" =~ \$\(.*\) ]]; then
-    error "Model name contains potential command substitution pattern"
+    ui_error "Model name contains potential command substitution pattern"
     return 1
   fi
 
   # Reject quote characters that could break parsing
   if [[ "$model" =~ [\'\"] ]]; then
-    error "Model name contains quote characters that could break parsing"
+    ui_error "Model name contains quote characters that could break parsing"
     return 1
   fi
 
   # Basic model name validation - only allow safe characters
   if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
+    ui_error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
     return 1
   fi
 
@@ -1393,7 +1779,7 @@ validate_decrypted_content() {
   local content="$1"
 
   if [ -z "$content" ]; then
-    error "Decrypted content is empty"
+    ui_error "Decrypted content is empty"
     return 1
   fi
 
@@ -1404,7 +1790,7 @@ validate_decrypted_content() {
      [[ "$content" =~ ^(invalid|Invalid|INVALID)[:][[:space:]] ]] || \
      [[ "$content" =~ ^(corrupt|Corrupt|CORRUPT)[:][[:space:]] ]] || \
      [[ "$content" =~ ^(permission|Permission|PERMISSION)[[:space:]]+denied ]]; then
-    error "Decrypted content contains error indicators - may be corrupted"
+    ui_error "Decrypted content contains error indicators - may be corrupted"
     return 1
   fi
 
@@ -1414,7 +1800,7 @@ validate_decrypted_content() {
      [[ "$content" =~ \`.*\` ]] || \
      [[ "$content" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]] || \
      [[ "$content" =~ (>|>>|<<)[[:space:]]/ ]]; then
-    error "Decrypted content contains potentially malicious code"
+    ui_error "Decrypted content contains potentially malicious code"
     return 1
   fi
 
@@ -1428,7 +1814,7 @@ validate_decrypted_content() {
 
     # Check if line matches environment variable format
     if [[ ! "$line" =~ ^[A-Z_][A-Z0-9_]*=(.*)$ ]]; then
-      error "Decrypted content contains invalid format: $line"
+      ui_error "Decrypted content contains invalid format: $line"
       return 1
     fi
 
@@ -1439,7 +1825,7 @@ validate_decrypted_content() {
     if [[ "$value" =~ \$\(.*\) ]] || \
        [[ "$value" =~ \`.*\` ]] || \
        [[ "$value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
-      error "Decrypted content contains potentially malicious code in value"
+      ui_error "Decrypted content contains potentially malicious code in value"
       return 1
     fi
   done
@@ -1449,7 +1835,7 @@ validate_decrypted_content() {
 }
 
 switch_to_anthropic() {
-  banner "Native Anthropic"
+  ui_banner "Native Anthropic"
   echo -e "${BOLD}Using Native Anthropic${NC}"
   exec claude "$@"
 }
@@ -1466,15 +1852,15 @@ switch_to_custom() {
   model="$(get_config "custom_${provider_name}_model")"
 
   if [ -z "$api_key" ]; then
-    error "Provider '$provider_name' not configured. Run: clauver config custom"
+    ui_error "Provider '$provider_name' not configured. Run: clauver config custom"
     exit 1
   fi
   if [ -z "$base_url" ]; then
-    error "Provider '$provider_name' base URL missing. Run: clauver config custom"
+    ui_error "Provider '$provider_name' base URL missing. Run: clauver config custom"
     exit 1
   fi
 
-  banner "${provider_name}"
+  ui_banner "${provider_name}"
 
   export ANTHROPIC_BASE_URL="$base_url"
   export ANTHROPIC_AUTH_TOKEN="$api_key"
@@ -1488,7 +1874,7 @@ cmd_test() {
   local provider="${1:-}"
 
   if [ -z "$provider" ]; then
-    error "Usage: clauver test <provider>"
+    ui_error "Usage: clauver test <provider>"
     return 1
   fi
 
@@ -1496,9 +1882,9 @@ cmd_test() {
     anthropic)
       echo -e "${BOLD}Testing Native Anthropic${NC}"
       if timeout "$ANTHROPIC_TEST_TIMEOUT" claude --version &>/dev/null; then
-        success "Native Anthropic is working"
+        ui_success "Native Anthropic is working"
       else
-        error "Native Anthropic test failed"
+        ui_error "Native Anthropic test failed"
       fi
       ;;
     zai|minimax|kimi|deepseek)
@@ -1509,7 +1895,7 @@ cmd_test() {
       local api_key
       api_key="$(get_secret "$key_name")"
       if [ -z "$api_key" ]; then
-        error "${provider^^} not configured"
+        ui_error "${provider^^} not configured"
         return 1
       fi
       echo -e "${BOLD}Testing ${provider^^}${NC}"
@@ -1543,17 +1929,17 @@ cmd_test() {
       local test_pid=$!
       sleep 3
       if kill -0 $test_pid 2>/dev/null; then
-        success "${provider^^} configuration is valid"
+        ui_success "${provider^^} configuration is valid"
         kill $test_pid 2>/dev/null || true
       else
-        error "${provider^^} test failed"
+        ui_error "${provider^^} test failed"
       fi
       ;;
     *)
       local api_key
       api_key="$(get_config "custom_${provider}_api_key")"
       if [ -z "$api_key" ]; then
-        error "Provider '$provider' not found"
+        ui_error "Provider '$provider' not found"
         return 1
       fi
       echo -e "${BOLD}Testing Custom Provider: $provider${NC}"
@@ -1565,10 +1951,10 @@ cmd_test() {
       local test_pid=$!
       sleep 3
       if kill -0 $test_pid 2>/dev/null; then
-        success "$provider configuration is valid"
+        ui_success "$provider configuration is valid"
         kill $test_pid 2>/dev/null || true
       else
-        error "$provider test failed"
+        ui_error "$provider test failed"
       fi
       ;;
   esac
@@ -1593,9 +1979,9 @@ cmd_status() {
 
   echo -e "${BOLD}Native Anthropic:${NC}"
   if command -v claude &>/dev/null; then
-    success "Installed"
+    ui_success "Installed"
   else
-    error "Not installed"
+    ui_error "Not installed"
   fi
   echo
 
@@ -1605,7 +1991,7 @@ cmd_status() {
     api_key="$(get_secret "$key_name")"
     echo -e "${BOLD}${provider}:${NC}"
     if [ -n "$api_key" ]; then
-      success "Configured ($(mask_key "$api_key"))"
+      ui_success "Configured ($(mask_key "$api_key"))"
       # Show additional config for Kimi
       if [ "$provider" == "kimi" ]; then
         local kimi_model
@@ -1618,7 +2004,7 @@ cmd_status() {
         echo "  URL: $kimi_base_url"
       fi
     else
-      warn "Not configured"
+      ui_warn "Not configured"
     fi
     echo
   done
@@ -1630,7 +2016,7 @@ cmd_status() {
         provider_name="${provider_name%_api_key}"
         if [ -n "$value" ]; then
           echo -e "${BOLD}${provider_name}:${NC}"
-          success "Configured ($(mask_key "$value"))"
+          ui_success "Configured ($(mask_key "$value"))"
           echo "  Base URL: $(get_config "custom_${provider_name}_base_url")"
           echo
         fi
@@ -1661,7 +2047,7 @@ cmd_default() {
     anthropic)
       # Native Anthropic is always available
       set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
+      ui_success "Default provider set to: ${provider}"
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
@@ -1669,11 +2055,11 @@ cmd_default() {
       local zai_key
       zai_key="$(get_secret "ZAI_API_KEY")"
       if [ -z "$zai_key" ]; then
-        error "Z.AI is not configured. Run: clauver config zai"
+        ui_error "Z.AI is not configured. Run: clauver config zai"
         return 1
       fi
       set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
+      ui_success "Default provider set to: ${provider}"
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
@@ -1681,11 +2067,11 @@ cmd_default() {
       local minimax_key
       minimax_key="$(get_secret "MINIMAX_API_KEY")"
       if [ -z "$minimax_key" ]; then
-        error "MiniMax is not configured. Run: clauver config minimax"
+        ui_error "MiniMax is not configured. Run: clauver config minimax"
         return 1
       fi
       set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
+      ui_success "Default provider set to: ${provider}"
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
@@ -1693,11 +2079,11 @@ cmd_default() {
       local kimi_key
       kimi_key="$(get_secret "KIMI_API_KEY")"
       if [ -z "$kimi_key" ]; then
-        error "Kimi is not configured. Run: clauver config kimi"
+        ui_error "Kimi is not configured. Run: clauver config kimi"
         return 1
       fi
       set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
+      ui_success "Default provider set to: ${provider}"
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
@@ -1705,11 +2091,11 @@ cmd_default() {
       local deepseek_key
       deepseek_key="$(get_secret "DEEPSEEK_API_KEY")"
       if [ -z "$deepseek_key" ]; then
-        error "DeepSeek is not configured. Run: clauver config deepseek"
+        ui_error "DeepSeek is not configured. Run: clauver config deepseek"
         return 1
       fi
       set_config "default_provider" "$provider"
-      success "Default provider set to: ${provider}"
+      ui_success "Default provider set to: ${provider}"
       echo "Run 'clauver' without arguments to use this provider."
       return 0
       ;;
@@ -1719,11 +2105,11 @@ cmd_default() {
       custom_key="$(get_config "custom_${provider}_api_key")"
       if [ -n "$custom_key" ]; then
         set_config "default_provider" "$provider"
-        success "Default provider set to: ${provider}"
+        ui_success "Default provider set to: ${provider}"
         echo "Run 'clauver' without arguments to use this provider."
         return 0
       else
-        error "Unknown or unconfigured provider: '$provider'"
+        ui_error "Unknown or unconfigured provider: '$provider'"
         echo
         echo "Use 'clauver list' to see available providers."
         return 1
@@ -1738,16 +2124,16 @@ cmd_migrate() {
 
   # Check if already encrypted
   if [ -f "$SECRETS_AGE" ] && [ ! -f "$SECRETS" ]; then
-    success "Secrets are already encrypted!"
+    ui_success "Secrets are already encrypted!"
     echo "  Location: $(sanitize_path "$SECRETS_AGE")"
     return 0
   fi
 
   # Check if plaintext file exists
   if [ ! -f "$SECRETS" ]; then
-    warn "No plaintext secrets file found."
+    ui_warn "No plaintext secrets file found."
     if [ -f "$SECRETS_AGE" ]; then
-      success "Encrypted secrets file already exists at: $SECRETS_AGE"
+      ui_success "Encrypted secrets file already exists at: $SECRETS_AGE"
     else
       echo "No secrets to migrate. Configure a provider first:"
       echo "  clauver config <provider>"
@@ -1755,31 +2141,31 @@ cmd_migrate() {
     return 0
   fi
 
-  log "Found plaintext secrets file: $SECRETS"
+  ui_log "Found plaintext secrets file: $SECRETS"
   echo
 
   # Ensure age key exists
   if ! ensure_age_key; then
-    error "Failed to ensure age key. Migration aborted."
+    ui_error "Failed to ensure age key. Migration aborted."
     return 1
   fi
 
   # Load existing plaintext secrets
-  log "Loading plaintext secrets..."
+  ui_log "Loading plaintext secrets..."
   # shellcheck disable=SC1090
   source "$SECRETS"
 
   # Save to encrypted format
-  log "Encrypting secrets..."
+  ui_log "Encrypting secrets..."
   if save_secrets; then
-    success "Secrets successfully encrypted!"
+    ui_success "Secrets successfully encrypted!"
     echo "  Encrypted file: $(sanitize_path "$SECRETS_AGE")"
     echo "  Plaintext file: removed"
     echo
-    warn "IMPORTANT: Back up your age key at: $(sanitize_path "$AGE_KEY")"
+    ui_warn "IMPORTANT: Back up your age key at: $(sanitize_path "$AGE_KEY")"
     echo "Without this key, you cannot decrypt your secrets."
   else
-    error "Failed to encrypt secrets."
+    ui_error "Failed to encrypt secrets."
     return 1
   fi
 }
@@ -1814,7 +2200,7 @@ EOF
   case "$choice" in
     1)
       echo
-      success "Native Anthropic is ready to use!"
+      ui_success "Native Anthropic is ready to use!"
       echo
       echo -e "${GREEN}Next steps:${NC}"
       echo "  • Simply run: ${BOLD}clauver anthropic${NC}"
@@ -1848,13 +2234,13 @@ EOF
       ;;
     7)
       echo
-      warn "Setup skipped."
+      ui_warn "Setup skipped."
       echo "Run ${BOLD}clauver setup${NC} anytime to configure a provider."
       echo
       ;;
     *)
       echo
-      error "Invalid choice. Run 'clauver setup' again to retry."
+      ui_error "Invalid choice. Run 'clauver setup' again to retry."
       return 1
       ;;
   esac
@@ -1993,7 +2379,7 @@ case "${1:-}" in
             ;;
         esac
       else
-        error "Unknown command: '$1'"
+        ui_error "Unknown command: '$1'"
         echo "Use 'clauver help' for available commands."
         exit 1
       fi

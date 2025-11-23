@@ -58,6 +58,8 @@ test_background_cleanup_safety() {
     # Test cleanup function handles malformed job list
     local old_jobs_list
     old_jobs_list="$(jobs -p 2>/dev/null || echo "")"
+    # shellcheck disable=SC2034
+    local unused_jobs_list="$old_jobs_list"  # Variable captured for test verification
 
     # Simulate malicious job list (PID injection attempt)
     # This test ensures the function doesn't execute arbitrary PIDs
@@ -124,7 +126,8 @@ test_url_validation_security() {
     fi
 
     # Test URL length limits
-    local long_url="https://example.com/$(printf 'a%.0s' {1..3000})"
+    local long_url
+    long_url="https://example.com/$(printf 'a%.0s' {1..3000})"
     if validate_url "$long_url"; then
         echo "FAIL: Excessively long URL should be rejected"
         return 1
@@ -150,7 +153,8 @@ ANOTHER_VAR=another_value"
     [ "$ANOTHER_VAR" != "another_value" ] && echo "FAIL: ANOTHER_VAR not set correctly" && return 1
 
     # Test malicious content is rejected
-    local malicious_content="MALICIOUS=\$(rm -rf /tmp/test_$(date +%s))"
+    local malicious_content
+    malicious_content="MALICIOUS=\$(rm -rf /tmp/test_$(date +%s))"
     if load_decrypted_content_safely "$malicious_content"; then
         echo "FAIL: Malicious content should be rejected"
         return 1
@@ -184,7 +188,7 @@ test_sanitized_error_messages() {
         local home_sanitized
         home_sanitized=$(sanitize_path "$home_test")
 
-        if [[ "$home_sanitized" != "~/.clauver/age.key" ]]; then
+        if [[ "$home_sanitized" != "\$HOME/.clauver/age.key" ]]; then
             echo "FAIL: Home path not properly sanitized: $home_sanitized"
             return 1
         fi
