@@ -191,7 +191,8 @@ test_validation_functions() {
     # Test URL validation
     # Valid URLs
     assert_command_success "validate_url 'https://api.example.com'" "HTTPS URL validation should accept secure API endpoint"
-    assert_command_success "validate_url 'http://localhost:8080'" "HTTP URL validation should accept localhost with port for development"
+    assert_command_failure "validate_url 'http://localhost:8080'" "HTTP URL validation should reject HTTP protocol for security"
+    assert_command_failure "validate_url 'https://localhost:8080'" "HTTPS URL validation should reject localhost for SSRF protection"
     assert_command_success "validate_url 'https://api.test.com/path'" "URL validation should accept URL with path endpoint"
 
     # Invalid URLs
