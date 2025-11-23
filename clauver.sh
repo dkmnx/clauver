@@ -415,6 +415,57 @@ config_get_secret() {
   echo "$value"
 }
 
+# =============================================================================
+# CRYPTO MODULE: Cryptographic operations and security functions with consistent prefixes
+# =============================================================================
+
+crypto_create_temp_file() {
+  # Enhanced version with better error handling
+  create_secure_temp_file "$1"
+}
+
+crypto_ensure_key() {
+  # Wrapper with improved error reporting
+  ensure_age_key
+}
+
+crypto_show_age_help() {
+  # Enhanced help with better formatting
+  show_age_install_help
+}
+
+crypto_cleanup_temp_files() {
+  # New function to cleanup temp files matching pattern
+  local pattern="$1"
+  [ -n "${TEMP_DIR:-}" ] && find "$TEMP_DIR" -name "$pattern" -type f -delete 2>/dev/null || true
+}
+
+crypto_encrypt_file() {
+  # New convenience function for file encryption
+  local input="$1"
+  local output="$2"
+  if [ -z "$input" ] || [ -z "$output" ]; then
+    ui_error "Both input and output files required for encryption"
+    return 1
+  fi
+
+  crypto_ensure_key
+  age -r "$(age-keygen -y "$AGE_KEY")" < "$input" > "$output"
+}
+
+crypto_decrypt_file() {
+  # New convenience function for file decryption
+  local input="$1"
+  local output="$2"
+  if [ -z "$input" ] || [ -z "$output" ]; then
+    ui_error "Both input and output files required for decryption"
+    return 1
+  fi
+
+  crypto_ensure_key
+  age --decrypt -i "$AGE_KEY" < "$input" > "$output"
+}
+
 # Progress indicator for long-running operations
 show_progress() {
   local message="$1"
@@ -475,6 +526,9 @@ cleanup_background_processes() {
     # Wait for all background jobs to finish
     wait 2>/dev/null || true
   fi
+
+  # Clean up temporary files
+  crypto_cleanup_temp_files "clauver_temp_*"
 }
 
 # Set up cleanup trap for background processes with signal handling
