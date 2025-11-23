@@ -11,7 +11,7 @@ TEST_FILES = $(wildcard $(TEST_ROOT)/test_*.sh)
 TEST_NAMES = $(basename $(notdir $(TEST_FILES)))
 
 # Phony targets
-.PHONY: all test clean check coverage report help utilities encryption providers integration error_handling performance smoke ci setup_deps
+.PHONY: all test clean check coverage report help utilities encryption providers integration error_handling performance smoke security ci setup_deps
 
 # Default target
 all: setup_deps test
@@ -71,6 +71,13 @@ error_handling: setup_deps
 performance: setup_deps
 	@echo "Running performance tests..."
 	@./run_all_tests.sh performance || (echo "❌ Performance tests failed" && exit 1)
+
+security: setup_deps
+	@echo "Running comprehensive security hardening tests..."
+	@echo "==============================================="
+	@./test_security_hardening.sh || (echo "❌ Security hardening tests failed" && exit 1)
+	@echo "==============================================="
+	@echo "✓ All security tests passed - clauver.sh is hardened"
 
 # Run specific test
 specific:
@@ -227,6 +234,7 @@ help:
 	@echo "  integration       - Run integration tests"
 	@echo "  error_handling    - Run error handling tests"
 	@echo "  performance       - Run performance tests"
+	@echo "  security          - Run comprehensive security hardening tests"
 	@echo "  specific          - Run specific test function"
 	@echo "  coverage          - Generate test coverage report"
 	@echo "  clean             - Clean up test artifacts"
