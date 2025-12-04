@@ -5,6 +5,24 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.1] - 2025-12-04
+
+### Fixed
+
+- Model name validation - Extended validation regex to support modern model identifier formats
+- Removed restrictive character limitations that prevented using provider/model:tag formats
+- Fixed validation for model names containing forward slashes (/) and colons (:)
+- Cleaned up unused `validation_model_name()` function that contained outdated validation logic
+
+### Improved
+
+- Enhanced model name compatibility - Now supports common model naming patterns:
+  - Provider/model format (e.g., `openai/gpt-4`)
+  - Model:tag format (e.g., `amazon/nova-2-lite-v1:free`)
+  - Traditional model names (e.g., `glm-4.6`, `MiniMax-M2`)
+- Maintained security validation - Dangerous characters still properly rejected
+- Updated version references across documentation and installation scripts
+
 ## [1.12.0] - 2025-11-23
 
 ### Refactored
