@@ -270,47 +270,6 @@ validation_provider_name() {
   return 0
 }
 
-validation_model_name() {
-  local model="$1"
-
-  # Basic validation - non-empty
-  if [ -z "$model" ]; then
-    ui_error "Model name cannot be empty"
-    return 1
-  fi
-
-  # Security: Prevent shell injection attempts
-  if [[ "$model" =~ \$\(|\`|\$\{ ]]; then
-    ui_error "Model name contains dangerous characters that could be used for injection attacks"
-    return 1
-  fi
-
-  # Prevent command substitution patterns
-  if [[ "$model" =~ \$\(.*\) ]]; then
-    ui_error "Model name contains potential command substitution pattern"
-    return 1
-  fi
-
-  # Prevent quote characters that could break parsing
-  if [[ "$model" =~ [\"\'] ]]; then
-    ui_error "Model name contains quote characters that could break parsing"
-    return 1
-  fi
-
-  # Format validation - allow common model name characters
-  if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    ui_error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
-    return 1
-  fi
-
-  # Length validation
-  if [ ${#model} -gt 100 ]; then
-    ui_error "Model name too long (maximum 100 characters)"
-    return 1
-  fi
-
-  return 0
-}
 
 validation_decrypted_content() {
   local content="$1"
@@ -1765,9 +1724,9 @@ validate_model_name() {
     return 1
   fi
 
-  # Basic model name validation - only allow safe characters
-  if [[ ! "$model" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    ui_error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen allowed)"
+  # Basic model name validation - allow safe characters including provider/model:tag format
+  if [[ ! "$model" =~ ^[a-zA-Z0-9.\\/_:-]+$ ]]; then
+    ui_error "Model name contains invalid characters (only alphanumeric, dot, underscore, hyphen, forward slash, colon allowed)"
     return 1
   fi
 
