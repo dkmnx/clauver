@@ -15,6 +15,14 @@ Describe "clauver entry point" {
         Assert-MockCalled Initialize-Clauver -Times 1
     }
 
+    It "Should route config command" {
+        Mock Set-ClauverConfig { }
+
+        & $scriptPath config minimax
+
+        Assert-MockCalled Set-ClauverConfig -Times 1 -ParameterFilter { $Name -eq "minimax" }
+    }
+
     It "Should route help command" {
         Mock Show-ClauverHelp { }
 

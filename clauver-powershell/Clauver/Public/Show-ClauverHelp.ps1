@@ -7,6 +7,7 @@ USAGE:
 
 COMMANDS:
     setup        Initialize clauver configuration
+    config       Configure a provider
     list         List all configured providers
     status       Check provider status
     test         Test a provider configuration
