@@ -15,7 +15,8 @@ $command = $RemainingArgs[0]
 
 switch ($command) {
     "setup" {
-        Initialize-Clauver -HomePath $env:USERPROFILE
+        $homePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
+        Initialize-Clauver -HomePath $homePath
     }
     "help" {
         Show-ClauverHelp
