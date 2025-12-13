@@ -26,16 +26,25 @@ Describe 'Custom Provider Support' {
             "custom_myprovider_api_key=sk-test-12345" | Out-File -FilePath $configPath -Encoding UTF8
             "custom_myprovider_base_url=https://api.myprovider.com" | Out-File -FilePath $configPath -Encoding UTF8 -Append
 
-            # Mock Switch-ToCustom to capture the call
-            Mock Switch-ToCustom {} -Verifiable -ParameterFilter {
-                $ProviderName -eq "myprovider" -and $ClaudeArgs -contains "test prompt"
+            # Mock within module scope
+            InModuleScope "Clauver" {
+                # Mock Switch-ToCustom to capture the call
+                Mock Switch-ToCustom {} -Verifiable -ParameterFilter {
+                    $ProviderName -eq "myprovider" -and $ClaudeArgs -contains "test prompt"
+                }
+
+                # Mock the final claude call to prevent actual execution
+                Mock "claude" {} -Verifiable
             }
 
             # Act: Call clauver with custom provider
             & (Join-Path $PSScriptRoot ".." ".." "clauver.ps1") "myprovider" "test prompt"
 
             # Assert: Verify custom provider was detected and used
-            Assert-MockCalled Switch-ToCustom -Times 1 -Exactly
+            InModuleScope "Clauver" {
+                Assert-MockCalled Switch-ToCustom -Times 1 -Exactly
+                Assert-MockCalled "claude" -Times 1 -Exactly
+            }
         }
 
         It 'Should fall back to default provider when custom provider not found' {
@@ -59,18 +68,27 @@ Describe 'Custom Provider Support' {
         }
 
         It 'Should show error when neither custom nor default provider found' {
-            # Mock Show-ClauverHelp
-            Mock Show-ClauverHelp {} -Verifiable
+            # Mock within module scope
+            InModuleScope "Clauver" {
+                # Mock Show-ClauverHelp
+                Mock Show-ClauverHelp {} -Verifiable
 
-            # Mock Write-Host to capture the error output
-            Mock Write-Host {} -Verifiable -ParameterFilter { $ForegroundColor -eq "Red" }
+                # Mock Write-Host to capture the error output
+                Mock Write-Host {} -Verifiable -ParameterFilter { $ForegroundColor -eq "Red" }
+            }
 
             # Act: Call clauver with unknown provider
-            & (Join-Path $PSScriptRoot ".." ".." "clauver.ps1") "unknownprovider"
+            try {
+                & (Join-Path $PSScriptRoot ".." ".." "clauver.ps1") "unknownprovider"
+            } catch {
+                # Expected to exit with error
+            }
 
             # Assert: Should show error and help
-            Assert-MockCalled Write-Host -Times 1 -Exactly -ParameterFilter { $ForegroundColor -eq "Red" }
-            Assert-MockCalled Show-ClauverHelp -Times 1 -Exactly
+            InModuleScope "Clauver" {
+                Assert-MockCalled Write-Host -Times 1 -Exactly -ParameterFilter { $ForegroundColor -eq "Red" }
+                Assert-MockCalled Show-ClauverHelp -Times 1 -Exactly
+            }
         }
     }
 
