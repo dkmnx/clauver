@@ -151,22 +151,95 @@ function Perform-ClauverUpdate {
         # Security: Download both script and checksum file
         Write-Log "Starting download process..."
 
-        # Download main script
+        # Download main script with progress
         $downloadUrl = "$script:RawContentBase/v$LatestVersion/clauver.sh"
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -TimeoutSec $script:DownloadTimeout
+        try {
+            $webClient = New-Object System.Net.WebClient
+            $webClient.DownloadFileCompleted += {
+                if ($Host.UI.RawUI) {
+                    Write-Progress -Activity "Downloading Update" -Completed
+                }
+            }
 
-        if (-not (Test-Path $tempFile -PathType Leaf) -or (Get-Item $tempFile).Length -eq 0) {
-            Write-ClauverError "Failed to download update"
+            # Start download with progress tracking
+            Write-Log "Downloading clauver.sh v$LatestVersion..."
+            if ($Host.UI.RawUI) {
+                Write-Progress -Activity "Downloading Update" -Status "Downloading clauver.sh v$LatestVersion..." -PercentComplete 0
+            }
+
+            $downloadJob = Start-Job -ScriptBlock {
+                param($Url, $OutFile, $Timeout)
+                try {
+                    $webRequest = Invoke-WebRequest -Uri $Url -OutFile $OutFile -TimeoutSec $Timeout -PassThru
+                    return @{
+                        Success = $true
+                        Size = $webRequest.Headers['Content-Length']
+                    }
+                } catch {
+                    return @{
+                        Success = $false
+                        Error = $_.Exception.Message
+                    }
+                }
+            } -ArgumentList $downloadUrl, $tempFile, $script:DownloadTimeout
+
+            # Monitor progress
+            $timeoutCount = 0
+            $maxTimeoutChecks = [math]::Ceiling($script:DownloadTimeout / 2)
+
+            while (-not $downloadJob.State -eq 'Completed' -and -not $downloadJob.State -eq 'Failed' -and $timeoutCount -lt $maxTimeoutChecks) {
+                Start-Sleep 2
+                $timeoutCount++
+
+                if ($Host.UI.RawUI) {
+                    $percentComplete = [math]::Min(90, ($timeoutCount * 100 / $maxTimeoutChecks))
+                    Write-Progress -Activity "Downloading Update" -Status "Downloading clauver.sh v$LatestVersion..." -PercentComplete $percentComplete
+                }
+            }
+
+            # Get the result
+            $downloadResult = Receive-Job $downloadJob
+            Remove-Job $downloadJob
+
+            if (-not $downloadResult.Success) {
+                if ($Host.UI.RawUI) {
+                    Write-Progress -Activity "Downloading Update" -Completed
+                }
+                Write-ClauverError "Failed to download update: $($downloadResult.Error)"
+                return @{
+                    Success = $false
+                    Error = "Download failed: $($downloadResult.Error)"
+                }
+            }
+        } catch {
+            if ($Host.UI.RawUI) {
+                Write-Progress -Activity "Downloading Update" -Completed
+            }
+            Write-ClauverError "Failed to download update: $($_.Exception.Message)"
             return @{
                 Success = $false
                 Error = "Download failed"
             }
         }
 
-        # Download checksum file
+        # Verify download
+        if (-not (Test-Path $tempFile -PathType Leaf) -or (Get-Item $tempFile).Length -eq 0) {
+            Write-ClauverError "Failed to download update: empty file"
+            return @{
+                Success = $false
+                Error = "Download failed - empty file"
+            }
+        }
+
+        # Download checksum file with progress
         $checksumUrl = "$script:RawContentBase/v$LatestVersion/clauver.sh.sha256"
         try {
-            Invoke-WebRequest -Uri $checksumUrl -OutFile $tempChecksum -TimeoutSec $script:PerformanceDefaults.network_max_time
+            Write-Log "Downloading integrity checksum..."
+            if ($Host.UI.RawUI) {
+                Write-Progress -Activity "Downloading Update" -Status "Downloading SHA256 checksum..." -PercentComplete 95
+            }
+
+            Invoke-WebRequest -Uri $checksumUrl -OutFile $tempChecksum -TimeoutSec $script:PerformanceDefaults.network_max_time -ErrorAction Stop
 
             if ((Test-Path $tempChecksum -PathType Leaf) -and (Get-Item $tempChecksum).Length -gt 0) {
                 # Verify SHA256 if available
@@ -247,9 +320,27 @@ function Perform-ClauverUpdate {
         }
 
     } finally {
-        # Cleanup temporary files
-        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-        Remove-Item $tempChecksum -Force -ErrorAction SilentlyContinue
+        # Robust cleanup of temporary files
+        @($tempFile, $tempChecksum) | ForEach-Object {
+            if ($_ -and (Test-Path $_ -ErrorAction SilentlyContinue)) {
+                try {
+                    Remove-Item $_ -Force -ErrorAction Stop
+                    Write-Debug "Cleaned up temporary file: $_"
+                } catch {
+                    Write-Warning "Failed to clean up temporary file $_ : $($_.Exception.Message)"
+                    # Try with alternate method if direct removal fails
+                    try {
+                        [System.IO.File]::Delete($_)
+                    } catch {
+                        Write-Warning "Could not delete temporary file $_ using alternative method"
+                    }
+                }
+            }
+        }
+
+        # Clear any background jobs that might be stuck
+        Get-Job | Where-Object { $_.State -eq 'Running' -and $_.Name -like '*clauver*' } | Stop-Job -Force -ErrorAction SilentlyContinue
+        Get-Job | Where-Object { $_.State -eq 'Completed' -or $_.State -eq 'Failed' -or $_.Name -like '*clauver*' } | Remove-Job -Force -ErrorAction SilentlyContinue
     }
 }
 
