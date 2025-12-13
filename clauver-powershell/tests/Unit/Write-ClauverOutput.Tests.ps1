@@ -1,5 +1,5 @@
 BeforeAll {
-    Import-Module $PSScriptRoot/../../Clauver.psm1 -Force
+    Import-Module $PSScriptRoot/../../Clauver.psm1
 }
 
 Describe "Write-ClauverOutput" {
