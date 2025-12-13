@@ -23,6 +23,30 @@ Describe "clauver entry point" {
         Assert-MockCalled Get-ClauverProviderList -Times 1
     }
 
+    It "Should route status command" {
+        Mock Get-ClauverStatus { }
+
+        & $scriptPath status
+
+        Assert-MockCalled Get-ClauverStatus -Times 1
+    }
+
+    It "Should route test command" {
+        Mock Test-ClauverProvider { }
+
+        & $scriptPath test minimax
+
+        Assert-MockCalled Test-ClauverProvider -Times 1 -ParameterFilter { $Name -eq "minimax" }
+    }
+
+    It "Should route version command" {
+        Mock Get-ClauverVersion { }
+
+        & $scriptPath version
+
+        Assert-MockCalled Get-ClauverVersion -Times 1
+    }
+
     It "Should show error for unknown command" {
         $result = & $scriptPath unknowncommand 2>&1
         $result | Should -Match "Unknown command"

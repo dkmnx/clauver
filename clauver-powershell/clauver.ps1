@@ -20,6 +20,15 @@ switch ($command) {
     "list" {
         Get-ClauverProviderList
     }
+    "status" {
+        Get-ClauverStatus
+    }
+    "test" {
+        Test-ClauverProvider -Name $RemainingArgs[1]
+    }
+    "version" {
+        Get-ClauverVersion
+    }
     default {
         Write-Output "Unknown command: $command. Run 'clauver help' for usage information"
         exit 1
