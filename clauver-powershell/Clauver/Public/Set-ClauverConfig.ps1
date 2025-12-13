@@ -17,9 +17,13 @@ function Set-ClauverConfig {
 
     # Encrypt and store API key
     $secretsFile = Join-Path (Get-ClauverHome) "secrets.env.age"
-    $apiKey | Invoke-AgeEncrypt -OutputFile $secretsFile
-
-    Write-ClauverSuccess "$Name provider configured successfully"
+    try {
+        $apiKey | Invoke-AgeEncrypt -OutputFile $secretsFile
+        Write-ClauverSuccess "$Name provider configured successfully"
+    } catch {
+        Write-ClauverError "Failed to encrypt API key: $_"
+        exit 1
+    }
 }
 
 function Get-ProviderDefault {

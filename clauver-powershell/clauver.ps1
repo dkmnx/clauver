@@ -51,7 +51,10 @@ switch ($command) {
         Invoke-ClauverProvider -Name $_
     }
     default {
-        Write-Output "Unknown command: $command. Run 'clauver help' for usage information"
+        if ($command) {
+            Write-Host "Unknown command: $command" -ForegroundColor Red
+        }
+        Show-ClauverHelp
         exit 1
     }
 }

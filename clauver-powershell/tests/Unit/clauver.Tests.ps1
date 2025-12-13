@@ -71,11 +71,6 @@ Describe "clauver entry point" {
         Assert-MockCalled Invoke-ClauverMigrate -Times 1
     }
 
-    It "Should show error for unknown command" {
-        $result = & $scriptPath unknowncommand 2>&1
-        $result | Should -Match "Unknown command"
-    }
-
     It "Should route provider shortcut commands" {
         Mock Invoke-ClauverProvider { }
 

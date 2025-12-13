@@ -13,4 +13,13 @@ Describe "Initialize-Clauver" {
         $ageKeyPath = Join-Path $configDir "age.key"
         $ageKeyPath | Should -Exist
     }
+
+    It "Should handle errors gracefully when age-keygen fails" {
+        InModuleScope Clauver {
+            Mock age-keygen { throw "Command not found" }
+            Mock Write-ClauverError { }
+
+            { Initialize-Clauver -HomePath "/tmp/test-error" } | Should -Throw
+        }
+    }
 }
