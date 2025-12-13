@@ -47,6 +47,22 @@ Describe "clauver entry point" {
         Assert-MockCalled Get-ClauverVersion -Times 1
     }
 
+    It "Should route default command with provider name" {
+        Mock Set-ClauverDefault { }
+
+        & $scriptPath default minimax
+
+        Assert-MockCalled Set-ClauverDefault -Times 1 -ParameterFilter { $Name -eq "minimax" }
+    }
+
+    It "Should route migrate command" {
+        Mock Invoke-ClauverMigrate { }
+
+        & $scriptPath migrate
+
+        Assert-MockCalled Invoke-ClauverMigrate -Times 1
+    }
+
     It "Should show error for unknown command" {
         $result = & $scriptPath unknowncommand 2>&1
         $result | Should -Match "Unknown command"

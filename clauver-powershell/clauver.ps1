@@ -29,6 +29,21 @@ switch ($command) {
     "version" {
         Get-ClauverVersion
     }
+    "default" {
+        if ($RemainingArgs[1]) {
+            Set-ClauverDefault -Name $RemainingArgs[1]
+        } else {
+            $default = Get-ClauverDefault
+            if ($default) {
+                Write-Output "Default provider: $default"
+            } else {
+                Write-Output "No default provider set"
+            }
+        }
+    }
+    "migrate" {
+        Invoke-ClauverMigrate
+    }
     { $_ -in @("anthropic", "minimax", "zai", "kimi", "deepseek", "custom") } {
         Invoke-ClauverProvider -Name $_
     }
