@@ -8,11 +8,11 @@ BeforeAll {
 
 Describe "clauver entry point" {
     It "Should route setup command" {
-        Mock Initialize-Clauver { }
+        Mock Show-ClauverSetup { }
 
         & $scriptPath setup
 
-        Assert-MockCalled Initialize-Clauver -Times 1
+        Assert-MockCalled Show-ClauverSetup -Times 1
     }
 
     It "Should route config command" {

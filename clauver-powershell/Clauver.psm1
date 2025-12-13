@@ -11,6 +11,10 @@ function Initialize-Clauver {
 }
 
 # Dot source the private and public function files
+# Constants first (other files depend on these)
+. (Join-Path $PSScriptRoot "Clauver/Private/ClauverConstants.ps1")
+# Helper functions
+. (Join-Path $PSScriptRoot "Clauver/Private/Format-ClauverMaskedKey.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverConfig.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverInput.ps1")
@@ -32,5 +36,6 @@ function Initialize-Clauver {
 . (Join-Path $PSScriptRoot "Clauver/Public/Update-Clauver.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Install-Clauver.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Show-ClauverHelp.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Public/Show-ClauverSetup.ps1")
 
-Export-ModuleMember -Function Initialize-Clauver, Get-ClauverProvider, Get-ClauverStatus, Get-ClauverVersion, Get-ClauverDefault, Set-ClauverConfig, Set-ClauverDefault, Invoke-ClauverProvider, Invoke-ClauverMigrate, Register-ClauverTabCompletion, Update-Clauver, Install-Clauver, Show-ClauverHelp, Test-ClauverProvider
+Export-ModuleMember -Function Initialize-Clauver, Get-ClauverProvider, Get-ClauverStatus, Get-ClauverVersion, Get-ClauverDefault, Set-ClauverConfig, Set-ClauverDefault, Invoke-ClauverProvider, Invoke-ClauverMigrate, Register-ClauverTabCompletion, Update-Clauver, Install-Clauver, Show-ClauverHelp, Show-ClauverSetup, Test-ClauverProvider
