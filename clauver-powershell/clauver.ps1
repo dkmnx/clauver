@@ -29,6 +29,9 @@ switch ($command) {
     "version" {
         Get-ClauverVersion
     }
+    { $_ -in @("anthropic", "minimax", "zai", "kimi", "deepseek", "custom") } {
+        Invoke-ClauverProvider -Name $_
+    }
     default {
         Write-Output "Unknown command: $command. Run 'clauver help' for usage information"
         exit 1

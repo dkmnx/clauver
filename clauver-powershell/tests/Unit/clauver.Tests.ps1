@@ -51,4 +51,12 @@ Describe "clauver entry point" {
         $result = & $scriptPath unknowncommand 2>&1
         $result | Should -Match "Unknown command"
     }
+
+    It "Should route provider shortcut commands" {
+        Mock Invoke-ClauverProvider { }
+
+        & $scriptPath minimax
+
+        Assert-MockCalled Invoke-ClauverProvider -Times 1 -ParameterFilter { $Name -eq "minimax" }
+    }
 }
