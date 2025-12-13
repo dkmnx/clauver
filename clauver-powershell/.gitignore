@@ -1,0 +1,29 @@
+# PowerShell module ignore file
+# Ignore output directories
+out/
+bin/
+obj/
+
+# Ignore test results
+TestResults/
+
+# Ignore temporary files
+*.tmp
+*.temp
+*.log
+
+# Ignore user-specific PowerShell profiles
+Microsoft.PowerShell_profile.ps1
+
+# Ignore local settings
+*.user
+*.local
+
+# Ignore secrets and keys (unless explicitly committed)
+*.key
+*.p12
+*.pfx
+.secrets/
+
+# Ignore VS Code settings
+.vscode/
