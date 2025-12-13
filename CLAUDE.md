@@ -123,3 +123,4 @@ Partial submissions waste time and will be rejected.
 - Comprehensive testing before release
 
 **CRITICAL**: Don't add `CLAUDE.md`, `ai_docs`, `docs/plan` in git commits/pushes.
+- If porting or rewriting the @clauver.sh into other language, always check the @clauver.sh for the actual implementation when issues arises during the development

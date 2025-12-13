@@ -14,15 +14,21 @@ Import-Module $modulePath -Force -ErrorAction Stop
 $command = if ($RemainingArgs.Count -gt 0) { $RemainingArgs[0] } else { $null }
 
 switch ($command) {
-    "setup" {
+    { $_ -in @("help", "-h", "--help") } {
+        Show-ClauverHelp
+    }
+    { $_ -in @("setup", "-s") } {
         $homePath = if ($env:USERPROFILE) { $env:USERPROFILE } else { $env:HOME }
         Initialize-Clauver -HomePath $homePath
     }
+    { $_ -in @("version", "-v", "--version") } {
+        Get-ClauverVersion
+    }
+    "update" {
+        Update-Clauver
+    }
     "config" {
         Set-ClauverConfig -Name $RemainingArgs[1]
-    }
-    "help" {
-        Show-ClauverHelp
     }
     "list" {
         Get-ClauverProviderList
@@ -32,9 +38,6 @@ switch ($command) {
     }
     "test" {
         Test-ClauverProvider -Name $RemainingArgs[1]
-    }
-    "version" {
-        Get-ClauverVersion
     }
     "default" {
         if ($RemainingArgs[1]) {
