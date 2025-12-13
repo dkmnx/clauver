@@ -10,4 +10,6 @@ function Initialize-Clauver {
     }
 }
 
-Export-ModuleMember -Function Initialize-Clauver
+Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
+
+Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome
