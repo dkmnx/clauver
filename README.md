@@ -84,6 +84,22 @@ echo 'export PATH="$HOME/.clauver/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
 
+### PowerShell Installation
+
+Clauver now supports PowerShell 7+ on Windows, macOS, and Linux with full feature parity.
+
+```powershell
+# Clone the repository
+git clone https://github.com/dkmnx/clauver.git
+cd clauver/clauver-powershell
+
+# Run setup wizard
+./clauver.ps1 setup
+
+# Install tab completion
+. ./Completion/clauver-completion.ps1
+```
+
 ## Usage
 
 ### Setup Wizard
@@ -140,6 +156,39 @@ clauver default      # Show or set default provider
 clauver version      # Show current version and check for updates
 clauver update       # Update to the latest version
 clauver help         # Show help
+```
+
+#### PowerShell Usage
+
+```powershell
+# Configure providers
+./clauver.ps1 config zai           # Configure Z.AI
+./clauver.ps1 config minimax       # Configure MiniMax
+./clauver.ps1 config kimi          # Configure Kimi
+./clauver.ps1 config deepseek      # Configure DeepSeek
+./clauver.ps1 config custom        # Add custom provider
+
+# Use providers
+./clauver.ps1 anthropic    # Use Native Anthropic
+./clauver.ps1 zai          # Use Z.AI
+./clauver.ps1 minimax      # Use MiniMax
+./clauver.ps1 kimi         # Use Kimi
+./clauver.ps1 deepseek     # Use DeepSeek
+./clauver.ps1 <custom>     # Use custom provider
+
+# Set and use default provider
+./clauver.ps1 default zai
+./clauver.ps1 "What can you help me with?"
+
+# Manage providers
+./clauver.ps1 list         # List all providers
+./clauver.ps1 status       # Check provider status
+./clauver.ps1 test <name>  # Test a provider
+./clauver.ps1 migrate      # Migrate plaintext secrets to encrypted storage
+./clauver.ps1 default      # Show or set default provider
+./clauver.ps1 version      # Show current version and check for updates
+./clauver.ps1 update       # Update to the latest version
+./clauver.ps1 help         # Show help
 ```
 
 ## Examples
