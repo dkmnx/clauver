@@ -25,3 +25,5 @@ function Write-ClauverError {
     param([string]$Message)
     Write-Host "✗ $Message" -ForegroundColor $ClauverColors.Error
 }
+
+Export-ModuleMember -Function Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError

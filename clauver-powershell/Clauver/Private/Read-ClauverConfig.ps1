@@ -42,3 +42,5 @@ function Write-ClauverConfig {
         throw
     }
 }
+
+Export-ModuleMember -Function Read-ClauverConfig, Write-ClauverConfig

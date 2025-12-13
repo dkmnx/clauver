@@ -10,3 +10,5 @@ function Get-ClauverProviderList {
 
     return $providers
 }
+
+Export-ModuleMember -Function Get-ClauverProviderList

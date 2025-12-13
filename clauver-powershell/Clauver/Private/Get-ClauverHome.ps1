@@ -4,3 +4,5 @@ function Get-ClauverHome {
     # Use string concatenation to avoid Join-Path issues with Windows drive letters on Linux
     return "$homePath/.clauver"
 }
+
+Export-ModuleMember -Function Get-ClauverHome

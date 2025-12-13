@@ -10,9 +10,10 @@ function Initialize-Clauver {
     }
 }
 
-Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
-Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverConfig.ps1")
-Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Write-ClauverOutput.ps1")
-Import-Module (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverProviderList.ps1")
+# Dot source the private and public function files
+. (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverConfig.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Private/Write-ClauverOutput.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverProviderList.ps1")
 
 Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig, Write-ClauverConfig, Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError, Get-ClauverProviderList
