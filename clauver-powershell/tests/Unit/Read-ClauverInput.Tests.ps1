@@ -9,6 +9,9 @@ Describe "Read-ClauverInput" {
 
             $result = Read-ClauverInput -Prompt "Enter value" -Default "default"
 
+            Assert-MockCalled Read-Host -Times 1 -ParameterFilter {
+                $Prompt -eq "Enter value [default]"
+            }
             $result | Should -Be "default"
         }
     }
@@ -19,6 +22,9 @@ Describe "Read-ClauverInput" {
 
             $result = Read-ClauverInput -Prompt "Enter value"
 
+            Assert-MockCalled Read-Host -Times 1 -ParameterFilter {
+                $Prompt -eq "Enter value"
+            }
             $result | Should -Be "user input"
         }
     }
