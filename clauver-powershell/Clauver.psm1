@@ -10,8 +10,13 @@ function Initialize-Clauver {
     }
 }
 
+function Get-ClauverProviderList {
+    # TODO: Implement actual provider listing logic
+    return @()
+}
+
 Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
 Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverConfig.ps1")
 Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Write-ClauverOutput.ps1")
 
-Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig, Write-ClauverConfig, Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError
+Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig, Write-ClauverConfig, Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError, Get-ClauverProviderList
