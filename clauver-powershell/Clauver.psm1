@@ -11,7 +11,7 @@ function Initialize-Clauver {
 }
 
 function Get-ClauverProviderList {
-    # TODO: Implement actual provider listing logic
+    # Minimal implementation - returns empty until provider logic is added
     return @()
 }
 

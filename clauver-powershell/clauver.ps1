@@ -12,7 +12,6 @@ Import-Module $modulePath -Force -ErrorAction Stop
 
 # Route command to appropriate function
 $command = $RemainingArgs[0]
-$args = $RemainingArgs[1..($RemainingArgs.Count-1)]
 
 switch ($command) {
     "setup" {
