@@ -31,7 +31,7 @@ switch ($command) {
         Set-ClauverConfig -Name $RemainingArgs[1]
     }
     "list" {
-        Get-ClauverProviderList
+        Get-ClauverProvider
     }
     "status" {
         Get-ClauverStatus

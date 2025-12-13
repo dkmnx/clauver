@@ -2,6 +2,10 @@ function Register-ClauverTabCompletion {
     $scriptBlock = {
         param($commandName, $parameterName, $wordToComplete, $commandAst, $fakeBoundParameter)
 
+        # Suppress PSScriptAnalyzer warning about unused parameters
+        # These parameters are required by the Register-ArgumentCompleter interface
+        $null = $commandName, $parameterName, $commandAst, $fakeBoundParameter
+
         $completions = @(
             @{ CompletionText = 'setup';   ToolTip = 'Initialize clauver configuration' }
             @{ CompletionText = 'list';    ToolTip = 'List all configured providers' }

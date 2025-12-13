@@ -1,4 +1,4 @@
-function Show-ClauverHelp {
+﻿function Show-ClauverHelp {
     $Version = "1.12.1"
     Write-Host @"
 Clauver v$Version

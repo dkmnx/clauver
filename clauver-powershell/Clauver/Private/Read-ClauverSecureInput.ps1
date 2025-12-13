@@ -8,4 +8,3 @@ function Read-ClauverSecureInput {
     return $result
 }
 
-Export-ModuleMember -Function Read-ClauverSecureInput

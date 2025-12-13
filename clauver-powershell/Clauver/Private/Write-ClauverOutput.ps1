@@ -1,9 +1,14 @@
+﻿# NOTE: Write-Host is intentionally used in this module instead of Write-Output
+# because Clauver is a CLI tool and Write-Host provides the best user experience
+# for direct console output with colors. The PSAvoidUsingWriteHost warning is
+# suppressed in PSScriptAnalyzerSettings.psd1 for this reason.
+
 $ClauverColors = @{
-    Info = 'Cyan'
+    Info    = 'Cyan'
     Success = 'Green'
     Warning = 'Yellow'
-    Error = 'Red'
-    Banner = 'Magenta'
+    Error   = 'Red'
+    Banner  = 'Magenta'
 }
 
 function Write-ClauverLog {
@@ -26,21 +31,3 @@ function Write-ClauverError {
     Write-Host "✗ $Message" -ForegroundColor $ClauverColors.Error
 }
 
-function Show-ClauverBanner {
-    param([string]$Provider)
-    
-    $version = "1.12.1"
-    $bannerColor = $ClauverColors.Banner
-    
-    Write-Host ""
-    Write-Host -ForegroundColor $bannerColor "  ██████╗██╗      █████╗ ██╗   ██╗██╗   ██╗███████╗██████╗"
-    Write-Host -ForegroundColor $bannerColor " ██╔════╝██║     ██╔══██╗██║   ██║██║   ██║██╔════╝██╔══██╗"
-    Write-Host -ForegroundColor $bannerColor " ██║     ██║     ███████║██║   ██║██║   ██║█████╗  ██████╔╝"
-    Write-Host -ForegroundColor $bannerColor " ██║     ██║     ██╔══██║██║   ██║╚██╗ ██╔╝██╔══╝  ██╔══██╗"
-    Write-Host -ForegroundColor $bannerColor " ╚██████╗███████╗██║  ██║╚██████╔╝ ╚████╔╝ ███████╗██║  ██║"
-    Write-Host -ForegroundColor $bannerColor "  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚═════╝   ╚═══╝  ╚══════╝╚═╝  ╚═╝"
-    Write-Host -ForegroundColor $bannerColor "  v$version - $Provider"
-    Write-Host ""
-}
-
-Export-ModuleMember -Function Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError, Show-ClauverBanner

@@ -43,4 +43,3 @@ function Write-ClauverConfig {
     }
 }
 
-Export-ModuleMember -Function Read-ClauverConfig, Write-ClauverConfig

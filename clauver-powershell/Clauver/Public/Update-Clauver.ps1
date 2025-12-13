@@ -6,7 +6,7 @@ function Update-Clauver {
         Downloads and installs the latest version of clauver from GitHub.
         Verifies integrity using SHA256 checksum if available.
     #>
-    [CmdletBinding()]
+    [CmdletBinding(SupportsShouldProcess=$true)]
     param()
 
     # Get current script path and installation directory
@@ -66,6 +66,10 @@ function Update-Clauver {
                 Write-Host "Update cancelled."
                 return  # Let script exit naturally with code 0
             }
+        }
+
+        if (-not $PSCmdlet.ShouldProcess($installPath, "Update clauver from v$Version to v$latestVersion")) {
+            return  # Let script exit naturally with code 0
         }
 
         Write-Host "Updating from v$Version to v$latestVersion..." -ForegroundColor Blue

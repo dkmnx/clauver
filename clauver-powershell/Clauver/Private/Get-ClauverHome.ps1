@@ -9,4 +9,3 @@ function Get-ClauverHome {
     return "$homePath/.clauver"
 }
 
-Export-ModuleMember -Function Get-ClauverHome

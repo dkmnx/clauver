@@ -1,5 +1,5 @@
-param(
-    [string]$Destination = "$env:USERPROFILE\.clauver\bin"
+am(
+    [string]$Destination = "$env:USERPROFILE\clauver"
 )
 
 Write-Host "Installing Clauver to $Destination..." -ForegroundColor Cyan
