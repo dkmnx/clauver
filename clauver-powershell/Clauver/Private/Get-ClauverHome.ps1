@@ -1,3 +1,6 @@
 function Get-ClauverHome {
-    return Join-Path $env:USERPROFILE ".clauver"
+    # Normalize path separators for cross-platform compatibility
+    $homePath = $env:USERPROFILE -replace '\\', '/'
+    # Use string concatenation to avoid Join-Path issues with Windows drive letters on Linux
+    return "$homePath/.clauver"
 }
