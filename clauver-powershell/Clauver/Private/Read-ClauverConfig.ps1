@@ -17,3 +17,28 @@ function Read-ClauverConfig {
     }
     return $config
 }
+
+function Write-ClauverConfig {
+    param([hashtable]$Config)
+
+    $clauverHome = Get-ClauverHome
+    $configPath = Join-Path $clauverHome "config"
+    $tempFile = [System.IO.Path]::GetTempFileName()
+
+    try {
+        # Ensure the clauver home directory exists
+        if (-not (Test-Path $clauverHome)) {
+            New-Item -ItemType Directory -Path $clauverHome -Force | Out-Null
+        }
+
+        $Config.GetEnumerator() | ForEach-Object {
+            "$($_.Key)=$($_.Value)" | Out-File -FilePath $tempFile -Encoding utf8 -Append
+        }
+
+        Move-Item $tempFile $configPath -Force
+    }
+    catch {
+        if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+        throw
+    }
+}

@@ -13,4 +13,4 @@ function Initialize-Clauver {
 Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
 Import-Module (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverConfig.ps1")
 
-Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig
+Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig, Write-ClauverConfig
