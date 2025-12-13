@@ -31,3 +31,12 @@ function Write-ClauverError {
     Write-Host "✗ $Message" -ForegroundColor $ClauverColors.Error
 }
 
+# Aliases for shorter function names (matching bash implementation)
+New-Alias -Name Write-Log -Value Write-ClauverLog
+New-Alias -Name Write-Success -Value Write-ClauverSuccess
+New-Alias -Name Write-Warn -Value Write-ClauverWarn
+New-Alias -Name ui_success -Value Write-ClauverSuccess
+New-Alias -Name ui_warn -Value Write-ClauverWarn
+New-Alias -Name ui_error -Value Write-ClauverError
+New-Alias -Name ui_log -Value Write-ClauverLog
+

@@ -16,6 +16,8 @@ function Initialize-Clauver {
 # Helper functions
 . (Join-Path $PSScriptRoot "Clauver/Private/Format-ClauverMaskedKey.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Get-ClauverHome.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Private/Get-LatestVersion.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Private/Compare-ClauverVersions.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverConfig.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverInput.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverSecureInput.ps1")

@@ -1,178 +1,256 @@
 function Update-Clauver {
     <#
     .SYNOPSIS
-        Updates clauver to the latest version.
+        Updates clauver to the latest version with version checking.
     .DESCRIPTION
         Downloads and installs the latest version of clauver from GitHub.
-        Verifies integrity using SHA256 checksum if available.
+        Supports -CheckOnly switch for version checking only.
+        Matches bash implementation behavior exactly.
+    .PARAMETER CheckOnly
+        If specified, only checks for updates without performing them.
+    .PARAMETER Force
+        If specified, bypasses confirmation prompts.
     #>
     [CmdletBinding(SupportsShouldProcess=$true)]
-    param()
-
-    # Get current script path and installation directory
-    $scriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Path }
-    $installPath = $scriptPath
-
-    # Version and constants
-    $Version = "1.12.1"
-    $GitHubApiBase = "https://api.github.com/repos/dkmnx/clauver"
-    $RawContentBase = "https://raw.githubusercontent.com/dkmnx/clauver"
-    $DownloadTimeout = 60
-
-    # Allow overriding for testing
-    $TestMode = $env:CLAUVER_TEST_MODE -eq "1"
-
-    Write-Host "Checking for updates..." -ForegroundColor Blue
+    param(
+        [switch]$CheckOnly,
+        [switch]$Force
+    )
 
     try {
-        # Get latest version from GitHub
-        $latestVersion = if ($TestMode) {
-            # Return test version in test mode
-            "1.13.0"
-        } else {
-            $tags = Invoke-RestMethod -Uri "$GitHubApiBase/tags" -TimeoutSec 10
-            if ($tags -and $tags.Count -gt 0) {
-                $versionName = $tags[0].name
-                # Sanitize version: only allow v followed by numbers and dots
-                if ($versionName -match '^v[\d\.]+$') {
-                    $versionName -replace '^v', ''
-                } else {
-                    $null
-                }
-            } else {
-                $null
-            }
-        }
+        Write-Host "Current version: v$script:ClauverVersion"
 
+        $latestVersion = Get-LatestVersion
         if (-not $latestVersion) {
-            Write-Error "Failed to fetch latest version from GitHub"
-            return 1
-        }
-
-        # Check if we're already on latest version
-        if ($Version -eq $latestVersion) {
-            Write-Host "Already on latest version (v$Version)" -ForegroundColor Green
-            return  # Let script exit naturally with code 0
-        }
-
-        # Prevent accidental rollback from pre-release to older stable version
-        # Use proper version comparison
-        $currentVer = [System.Version]$Version
-        $latestVer = [System.Version]$latestVersion
-        if ($currentVer -gt $latestVer) {
-            Write-Warning "You are on a pre-release version (v$Version) newer than latest stable (v$latestVersion)"
-            $confirm = Read-Host "Rollback to v$latestVersion? This will downgrade your version. [y/N]"
-            if ($confirm -notmatch '^[Yy]') {
-                Write-Host "Update cancelled."
-                return  # Let script exit naturally with code 0
+            Write-ClauverError "Could not determine latest version"
+            return @{
+                Success = $false
+                Error = "Version check failed"
             }
         }
 
-        if (-not $PSCmdlet.ShouldProcess($installPath, "Update clauver from v$Version to v$latestVersion")) {
-            return  # Let script exit naturally with code 0
-        }
-
-        Write-Host "Updating from v$Version to v$latestVersion..." -ForegroundColor Blue
-
-        # Create temporary files
-        $tempFile = if ($TestMode) {
-            "test-temp-file"
-        } else {
-            [System.IO.Path]::GetTempFileName()
-        }
-        $tempChecksum = if ($TestMode) {
-            "test-temp-checksum"
-        } else {
-            [System.IO.Path]::GetTempFileName()
-        }
-
-        try {
-            # Download main script
-            Write-Host "Downloading clauver.sh v$latestVersion..." -ForegroundColor Blue
-            if (-not $TestMode) {
-                Invoke-WebRequest -Uri "$RawContentBase/v$latestVersion/clauver.sh" -OutFile $tempFile -TimeoutSec $DownloadTimeout
-            } else {
-                # Create dummy file for testing
-                "dummy content" | Out-File -FilePath $tempFile -Encoding UTF8
+        if ($script:ClauverVersion -eq $latestVersion) {
+            Write-Success "You are on the latest version"
+            return @{
+                Success = $true
+                CurrentVersion = $script:ClauverVersion
+                LatestVersion = $latestVersion
+                NewerVersionAvailable = $false
             }
+        }
 
-            if (-not (Test-Path $tempFile -PathType Leaf) -or (Get-Item $tempFile).Length -eq 0) {
-                Write-Error "Failed to download update"
-                return 1
-            }
+        # Version comparison logic matching bash sort -V behavior
+        $needsUpdate = Compare-ClauverVersions -Current $script:ClauverVersion -Latest $latestVersion
 
-            # Download checksum file
-            Write-Host "Downloading integrity checksum..." -ForegroundColor Blue
-            try {
-                if (-not $TestMode) {
-                    Invoke-WebRequest -Uri "$RawContentBase/v$latestVersion/clauver.sh.sha256" -OutFile $tempChecksum -TimeoutSec $DownloadTimeout
+        if ($needsUpdate) {
+            Write-Warn "Update available: v$latestVersion"
+            Write-Host "Run 'clauver update' to upgrade"
+
+            if ($CheckOnly) {
+                return @{
+                    Success = $true
+                    CurrentVersion = $script:ClauverVersion
+                    LatestVersion = $latestVersion
+                    NewerVersionAvailable = $true
                 }
+            }
+        } else {
+            Write-Warn "You are on a pre-release version (v$script:ClauverVersion) newer than latest stable (v$latestVersion)"
 
-                if ((Test-Path $tempChecksum -PathType Leaf) -and (Get-Item $tempChecksum).Length -gt 0) {
-                    # Verify SHA256 if available (Note: PowerShell doesn't have built-in sha256sum, so we skip verification)
-                    Write-Warning "SHA256 verification skipped (not available in PowerShell)"
-                } else {
-                    Write-Warning "SHA256 checksum file not available for v$latestVersion"
-                    Write-Warning "Proceeding without integrity verification (not recommended)"
-                    if (-not $TestMode) {
-                        $confirm = Read-Host "Continue anyway? [y/N]"
-                        if ($confirm -notmatch '^[Yy]') {
-                            Write-Error "Update cancelled by user"
-                            return 1
+            if (-not $CheckOnly -and -not $Force) {
+                $confirm = Read-Host "Rollback to v$latestVersion? This will downgrade your version. [y/N]"
+                if ($confirm -notmatch '^[Yy]') {
+                    Write-Host "Update cancelled."
+                    return @{
+                        Success = $true
+                        CurrentVersion = $script:ClauverVersion
+                        LatestVersion = $latestVersion
+                        NewerVersionAvailable = $false
+                        IsPreRelease = $true
+                        Cancelled = $true
+                    }
+                }
+            }
+        }
+
+        # If CheckOnly, return here without performing update
+        if ($CheckOnly) {
+            return @{
+                Success = $true
+                CurrentVersion = $script:ClauverVersion
+                LatestVersion = $latestVersion
+                NewerVersionAvailable = $needsUpdate
+                IsPreRelease = (-not $needsUpdate)
+            }
+        }
+
+        # Perform the actual update
+        return Perform-ClauverUpdate -LatestVersion $latestVersion
+
+    } catch {
+        Write-ClauverError "Update failed: $_"
+        return @{
+            Success = $false
+            Error = $_.Exception.Message
+        }
+    }
+}
+
+function Perform-ClauverUpdate {
+    <#
+    .SYNOPSIS
+        Performs the actual download and update of clauver.
+    #>
+    [CmdletBinding(SupportsShouldProcess=$true)]
+    param(
+        [Parameter(Mandatory=$true)]
+        [string]$LatestVersion
+    )
+
+    # Find clauver installation path
+    $installPath = Get-Command clauver -ErrorAction SilentlyContinue
+    if (-not $installPath) {
+        Write-ClauverError "Clauver installation not found in PATH"
+        return @{
+            Success = $false
+            Error = "Installation not found"
+        }
+    }
+    $installPath = $installPath.Source
+
+    # Check write permissions
+    $installDir = Split-Path $installPath -Parent
+    if (-not (Test-Path $installDir -PathType Container)) {
+        Write-ClauverError "Installation directory not found: $installDir"
+        return @{
+            Success = $false
+            Error = "Installation directory not found"
+        }
+    }
+
+    # Test write permission by creating a temp file
+    $testFile = Join-Path $installDir ".clauver_test_write_$(Get-Random)"
+    try {
+        "test" | Out-File -FilePath $testFile -ErrorAction Stop
+        Remove-Item $testFile -Force
+    } catch {
+        Write-ClauverError "No write permission to $installDir. Try with elevated privileges."
+        return @{
+            Success = $false
+            Error = "No write permission"
+        }
+    }
+
+    Write-Host "Updating from v$script:ClauverVersion to v$LatestVersion..." -ForegroundColor Blue
+
+    # Create temporary files
+    $tempFile = New-TemporaryFile
+    $tempChecksum = New-TemporaryFile
+
+    try {
+        # Security: Download both script and checksum file
+        Write-Log "Starting download process..."
+
+        # Download main script
+        $downloadUrl = "$script:RawContentBase/v$LatestVersion/clauver.sh"
+        Invoke-WebRequest -Uri $downloadUrl -OutFile $tempFile -TimeoutSec $script:DownloadTimeout
+
+        if (-not (Test-Path $tempFile -PathType Leaf) -or (Get-Item $tempFile).Length -eq 0) {
+            Write-ClauverError "Failed to download update"
+            return @{
+                Success = $false
+                Error = "Download failed"
+            }
+        }
+
+        # Download checksum file
+        $checksumUrl = "$script:RawContentBase/v$LatestVersion/clauver.sh.sha256"
+        try {
+            Invoke-WebRequest -Uri $checksumUrl -OutFile $tempChecksum -TimeoutSec $script:PerformanceDefaults.network_max_time
+
+            if ((Test-Path $tempChecksum -PathType Leaf) -and (Get-Item $tempChecksum).Length -gt 0) {
+                # Verify SHA256 if available
+                $expectedHash = (Get-Content $tempChecksum -Raw).Trim().Split()[0]
+                $actualHash = (Get-FileHash $tempFile -Algorithm SHA256).Hash
+
+                if ($actualHash -ne $expectedHash) {
+                    Write-ClauverError "SHA256 mismatch! File may be corrupted or tampered."
+                    Write-ClauverError "Expected: $expectedHash"
+                    Write-ClauverError "Got:      $actualHash"
+                    return @{
+                        Success = $false
+                        Error = "SHA256 verification failed"
+                    }
+                }
+                Write-Success "SHA256 verification passed"
+            } else {
+                Write-Warning "SHA256 checksum file not available for v$LatestVersion"
+                Write-Warning "Proceeding without integrity verification (not recommended)"
+
+                if (-not $Force) {
+                    $confirm = Read-Host "Continue anyway? [y/N]"
+                    if ($confirm -notmatch '^[Yy]') {
+                        Write-ClauverError "Update cancelled by user"
+                        return @{
+                            Success = $false
+                            Error = "Cancelled by user"
                         }
                     }
                 }
-            } catch {
-                Write-Warning "SHA256 checksum file not available for v$latestVersion"
-                Write-Warning "Proceeding without integrity verification (not recommended)"
-                if (-not $TestMode) {
-                    $confirm = Read-Host "Continue anyway? [y/N]"
-                    if ($confirm -notmatch '^[Yy]') {
-                        Write-Error "Update cancelled by user"
-                        return 1
+            }
+        } catch {
+            Write-Warning "SHA256 checksum file not available for v$LatestVersion"
+            Write-Warning "Proceeding without integrity verification (not recommended)"
+
+            if (-not $Force) {
+                $confirm = Read-Host "Continue anyway? [y/N]"
+                if ($confirm -notmatch '^[Yy]') {
+                    Write-ClauverError "Update cancelled by user"
+                    return @{
+                        Success = $false
+                        Error = "Cancelled by user"
                     }
                 }
             }
-
-            # Install update
-            if (Test-Path $installPath) {
-                # Backup current version
-                $backupPath = "$installPath.backup"
-                Copy-Item $installPath $backupPath -Force
-
-                try {
-                    Copy-Item $tempFile $installPath -Force
-                    if ($?) {
-                        Write-Host "Update complete! Now running v$latestVersion" -ForegroundColor Green
-                        Remove-Item $backupPath -Force -ErrorAction SilentlyContinue
-                        # Let script exit naturally with code 0
-                    } else {
-                        throw "Failed to install update"
-                    }
-                } catch {
-                    # Restore backup on failure
-                    Copy-Item $backupPath $installPath -Force
-                    Remove-Item $backupPath -Force -ErrorAction SilentlyContinue
-                    Write-Error "Failed to install update: $_"
-                    return 1
-                }
-            } else {
-                Write-Error "Installation path not found: $installPath"
-                return 1
-            }
-
-        } finally {
-            # Cleanup temporary files
-            Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
-            Remove-Item $tempChecksum -Force -ErrorAction SilentlyContinue
         }
 
-    } catch {
-        Write-Error "Update failed: $_"
-        return 1
-    }
+        # Install verified update
+        if ($PSCmdlet.ShouldProcess($installPath, "Update clauver from v$script:ClauverVersion to v$LatestVersion")) {
+            # Backup current version
+            $backupPath = "$installPath.backup"
+            Copy-Item $installPath $backupPath -Force
 
-    # Let script exit naturally with code 0
+            try {
+                Copy-Item $tempFile $installPath -Force
+                if ($?) {
+                    Write-Success "Update complete! Now running v$LatestVersion"
+                    Remove-Item $backupPath -Force -ErrorAction SilentlyContinue
+                    return @{
+                        Success = $true
+                        CurrentVersion = $script:ClauverVersion
+                        LatestVersion = $LatestVersion
+                        Updated = $true
+                    }
+                } else {
+                    throw "Failed to install update"
+                }
+            } catch {
+                # Restore backup on failure
+                Copy-Item $backupPath $installPath -Force
+                Remove-Item $backupPath -Force -ErrorAction SilentlyContinue
+                Write-ClauverError "Failed to install update: $_"
+                return @{
+                    Success = $false
+                    Error = "Installation failed"
+                }
+            }
+        }
+
+    } finally {
+        # Cleanup temporary files
+        Remove-Item $tempFile -Force -ErrorAction SilentlyContinue
+        Remove-Item $tempChecksum -Force -ErrorAction SilentlyContinue
+    }
 }
 
 # Export function only if running in a module
