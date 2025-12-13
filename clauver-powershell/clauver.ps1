@@ -17,6 +17,9 @@ switch ($command) {
     "setup" {
         Initialize-Clauver -HomePath $env:USERPROFILE
     }
+    "help" {
+        Show-ClauverHelp
+    }
     "list" {
         Get-ClauverProviderList
     }

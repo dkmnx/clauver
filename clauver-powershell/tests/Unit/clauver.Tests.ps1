@@ -15,6 +15,14 @@ Describe "clauver entry point" {
         Assert-MockCalled Initialize-Clauver -Times 1
     }
 
+    It "Should route help command" {
+        Mock Show-ClauverHelp { }
+
+        & $scriptPath help
+
+        Assert-MockCalled Show-ClauverHelp -Times 1
+    }
+
     It "Should route list command" {
         Mock Get-ClauverProviderList { return @() }
 
