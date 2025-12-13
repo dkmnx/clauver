@@ -29,15 +29,37 @@ function Set-ClauverConfig {
 function Get-ProviderDefault {
     param([string]$Name, [string]$Property)
 
+    # Match the bash script's PROVIDER_DEFAULTS exactly (lines 30-39 of clauver.sh)
     $defaults = @{
         'minimax' = @{
-            'BaseUrl' = 'https://api.minimax.io'
+            'BaseUrl' = 'https://api.minimax.io/anthropic'
             'Model' = 'MiniMax-M2'
         }
         'zai' = @{
             'BaseUrl' = 'https://api.z.ai/api/anthropic'
             'Model' = 'glm-4.6'
         }
+        'kimi' = @{
+            'BaseUrl' = 'https://api.kimi.com/coding/'
+            'Model' = 'kimi-for-coding'
+        }
+        'deepseek' = @{
+            'BaseUrl' = 'https://api.deepseek.com/anthropic'
+            'Model' = 'deepseek-chat'
+        }
+        'anthropic' = @{
+            'BaseUrl' = ''
+            'Model' = ''
+        }
+        'custom' = @{
+            'BaseUrl' = ''
+            'Model' = ''
+        }
+    }
+
+    # Return null if provider doesn't have defaults
+    if (-not $defaults.ContainsKey($Name)) {
+        return $null
     }
 
     return $defaults[$Name][$Property]
