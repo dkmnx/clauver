@@ -17,6 +17,7 @@ function Initialize-Clauver {
 . (Join-Path $PSScriptRoot "Clauver/Private/Read-ClauverSecureInput.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Write-ClauverOutput.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Private/Invoke-AgeEncrypt.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Private/Invoke-AgeDecrypt.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverProviderList.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Set-ClauverConfig.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverStatus.ps1")

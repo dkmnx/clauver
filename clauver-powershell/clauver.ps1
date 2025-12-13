@@ -11,7 +11,7 @@ $modulePath = Join-Path $scriptDir "Clauver.psm1"
 Import-Module $modulePath -Force -ErrorAction Stop
 
 # Route command to appropriate function
-$command = $RemainingArgs[0]
+$command = if ($RemainingArgs.Count -gt 0) { $RemainingArgs[0] } else { $null }
 
 switch ($command) {
     "setup" {
@@ -52,13 +52,29 @@ switch ($command) {
         Invoke-ClauverMigrate
     }
     { $_ -in @("anthropic", "minimax", "zai", "kimi", "deepseek", "custom") } {
-        Invoke-ClauverProvider -Name $_
+        # Provider shortcut - switch to provider and launch Claude CLI
+        # All remaining arguments after the provider name
+        $providerArgs = if ($RemainingArgs.Count -gt 1) { $RemainingArgs[1..($RemainingArgs.Count - 1)] } else { @() }
+        Invoke-ClauverProvider -Name $_ -ClaudeArgs $providerArgs
     }
     default {
-        if ($command) {
+        # No command specified - check for default provider
+        if (-not $command) {
+            $defaultProvider = Get-ClauverDefault
+            if ($defaultProvider) {
+                # Launch Claude CLI with default provider
+                $providerArgs = if ($RemainingArgs.Count -gt 0) { $RemainingArgs[1..($RemainingArgs.Count - 1)] } else { @() }
+                Invoke-ClauverProvider -Name $defaultProvider -ClaudeArgs $providerArgs
+            } else {
+                # No default provider set - show help
+                Show-ClauverHelp
+                exit 1
+            }
+        } else {
+            # Unknown command
             Write-Host "Unknown command: $command" -ForegroundColor Red
+            Show-ClauverHelp
+            exit 1
         }
-        Show-ClauverHelp
-        exit 1
     }
 }
