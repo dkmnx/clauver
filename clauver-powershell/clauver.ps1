@@ -40,7 +40,7 @@ if (-not $command) {
             Update-Clauver
         }
         "config" {
-            Set-ClauverConfig -Name $RemainingArgs[1]
+            Set-ClauverConfig -Provider $RemainingArgs[1]
         }
         "list" {
             Get-ClauverProvider
@@ -73,17 +73,26 @@ if (-not $command) {
             Invoke-ClauverProvider -Provider $_ -ClaudeArgs $providerArgs
         }
         default {
-            # Check if a default provider is set
-            $defaultProvider = Get-ClauverDefault
-            if ($defaultProvider) {
-                # Use the default provider with all arguments
-                $providerArgs = $RemainingArgs
-                Invoke-ClauverProvider -Provider $defaultProvider -ClaudeArgs $providerArgs
+            # Check if it's a custom provider
+            $customApiKey = Get-ConfigValue -Key "custom_${command}_api_key"
+            if ($customApiKey) {
+                # It's a custom provider
+                Write-Debug "Found custom provider: $command"
+                $providerArgs = if ($RemainingArgs.Count -gt 1) { $RemainingArgs[1..($RemainingArgs.Count - 1)] } else { @() }
+                Invoke-ClauverProvider -Provider $command -ClaudeArgs $providerArgs
             } else {
-                # Unknown command
-                Write-Host "Unknown command: $command" -ForegroundColor Red
-                Show-ClauverHelp
-                exit 1
+                # Check if a default provider is set
+                $defaultProvider = Get-ClauverDefault
+                if ($defaultProvider) {
+                    # Use the default provider with all arguments
+                    $providerArgs = $RemainingArgs
+                    Invoke-ClauverProvider -Provider $defaultProvider -ClaudeArgs $providerArgs
+                } else {
+                    # Unknown command
+                    Write-Host "Unknown command: $command" -ForegroundColor Red
+                    Show-ClauverHelp
+                    exit 1
+                }
             }
         }
     }

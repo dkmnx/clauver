@@ -12,15 +12,22 @@
         return
     }
 
-    # Check if provider is supported
+    # Load configuration and secrets first (needed for custom provider detection)
+    $config = Read-ClauverConfig
+    $secrets = Get-ClauverSecrets
+
+    # Check if it's a custom provider first
+    $customApiKey = $config["custom_${Provider}_api_key"]
+    if ($customApiKey) {
+        Switch-ToCustom -ProviderName $Provider -ClaudeArgs $ClaudeArgs
+        return
+    }
+
+    # Check if provider is supported (built-in providers)
     if (-not $script:ProviderConfigs.ContainsKey($Provider) -and $Provider -ne "kimi") {
         Write-ClauverError "Provider '$Provider' not supported"
         exit 1
     }
-
-    # Load configuration and secrets
-    $config = Read-ClauverConfig
-    $secrets = Get-ClauverSecrets
 
     # Validate required configuration
     $requirements = $script:ProviderRequires[$Provider]
@@ -68,15 +75,8 @@
             Switch-ToDeepSeek -ApiKey $apiKey -Model $model -ClaudeArgs $ClaudeArgs
         }
         default {
-            # Check if it's a custom provider
-            $customApiKey = $config["custom_${Provider}_api_key"]
-            if ($customApiKey) {
-                Switch-ToCustom -ProviderName $Provider -ClaudeArgs $ClaudeArgs
-            }
-            else {
-                Write-ClauverError "Unknown provider: '$Provider'"
-                exit 1
-            }
+            Write-ClauverError "Unknown provider: '$Provider'"
+            exit 1
         }
     }
 }
