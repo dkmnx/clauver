@@ -22,6 +22,8 @@ function Initialize-Clauver {
 . (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverStatus.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Test-ClauverProvider.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverVersion.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Public/Set-ClauverDefault.ps1")
+. (Join-Path $PSScriptRoot "Clauver/Public/Get-ClauverDefault.ps1")
 . (Join-Path $PSScriptRoot "Clauver/Public/Invoke-ClauverProvider.ps1")
 
-Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig, Read-ClauverInput, Read-ClauverSecureInput, Write-ClauverConfig, Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError, Get-ClauverProviderList, Set-ClauverConfig, Get-ProviderDefault, Invoke-AgeEncrypt, Get-ClauverAgeKey, Get-ClauverStatus, Test-ClauverProvider, Get-ClauverVersion, Invoke-ClauverProvider
+Export-ModuleMember -Function Initialize-Clauver, Get-ClauverHome, Read-ClauverConfig, Read-ClauverInput, Read-ClauverSecureInput, Write-ClauverConfig, Write-ClauverLog, Write-ClauverSuccess, Write-ClauverWarn, Write-ClauverError, Get-ClauverProviderList, Set-ClauverConfig, Get-ProviderDefault, Invoke-AgeEncrypt, Get-ClauverAgeKey, Get-ClauverStatus, Test-ClauverProvider, Get-ClauverVersion, Set-ClauverDefault, Get-ClauverDefault, Invoke-ClauverProvider
