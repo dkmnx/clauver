@@ -254,7 +254,7 @@ function Set-ClauverSecret {
         if (-not (Test-Path $ageKeyPath)) {
             Write-ClauverLog "Generating age encryption key..."
             & age-keygen -o $ageKeyPath
-            chmod 600 $ageKeyPath
+            Set-SecureFilePermissions -Path $ageKeyPath | Out-Null
             Write-ClauverSuccess "Age encryption key generated at $ageKeyPath"
             Write-Host ""
             Write-ClauverWarn "IMPORTANT: Back up your age key! Without this key, you cannot decrypt your secrets."
@@ -281,7 +281,7 @@ function Set-ClauverSecret {
             Invoke-AgeEncrypt -Plaintext $secretsData -OutputFile $secretsFile
 
             # Set secure permissions
-            chmod 600 $secretsFile
+            Set-SecureFilePermissions -Path $secretsFile | Out-Null
 
             # Remove any existing plaintext file
             $plaintextFile = Join-Path (Get-ClauverHome) "secrets.env"

@@ -56,11 +56,27 @@ function Invoke-ClauverMigrate {
                 }
             }
 
+            # If not using -Force, return early
             if (-not $Force) {
                 return @{
                     Success = $true
                     AlreadyEncrypted = $true
                     NeedsMigration = $false
+                }
+            }
+
+            # With -Force, ask for confirmation to re-encrypt
+            Write-Host ""
+            Write-ClauverWarn "You are using -Force to re-encrypt already encrypted secrets."
+            Write-Host "This will create a new encrypted file but won't affect your existing secrets."
+            $confirm = Read-Host "Continue? [y/N]"
+            if ($confirm -notmatch '^[Yy]') {
+                Write-Host "Migration cancelled."
+                return @{
+                    Success = $true
+                    AlreadyEncrypted = $true
+                    NeedsMigration = $false
+                    Cancelled = $true
                 }
             }
         }

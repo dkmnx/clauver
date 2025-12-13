@@ -4,7 +4,8 @@ function Perform-Migration {
     Performs the actual migration from plaintext secrets to encrypted format.
 
     .DESCRIPTION
-    Reads plaintext secrets, encrypts them using age, and removes the plaintext file.
+    Sources the plaintext secrets into environment variables (like bash),
+    then encrypts them using age and removes the plaintext file.
 
     .PARAMETER PlaintextPath
     Path to the plaintext secrets.env file.
@@ -25,10 +26,11 @@ function Perform-Migration {
     )
 
     try {
-        # Load existing plaintext secrets
+        # Load existing plaintext secrets into environment variables (matching bash behavior)
         Write-ClauverLog "Loading plaintext secrets..."
+        Import-ClauverSecrets -SecretsPath $PlaintextPath
 
-        # Read all lines from plaintext file
+        # Read all lines from plaintext file to prepare for encryption
         $secretsContent = Get-Content -Path $PlaintextPath -Raw -Encoding UTF8
 
         if ([string]::IsNullOrWhiteSpace($secretsContent)) {
@@ -38,7 +40,7 @@ function Perform-Migration {
             }
         }
 
-        # Prepare secrets data for encryption
+        # Prepare secrets data for encryption (matching bash save_secrets behavior)
         $secretsData = @()
         $lines = $secretsContent -split "`n"
 
@@ -61,7 +63,7 @@ function Perform-Migration {
 
         $secretsText = $secretsData -join "`n"
 
-        # Encrypt directly from memory using Invoke-AgeEncrypt
+        # Encrypt directly from memory
         Write-ClauverLog "Encrypting secrets..."
 
         $ageKeyPath = Get-ClauverAgeKey
@@ -123,8 +125,25 @@ function Perform-Migration {
             }
         }
 
-        # Set secure permissions on encrypted file
-        chmod 600 $EncryptedPath
+        # Set secure permissions on encrypted file (cross-platform)
+        if (-not (Set-SecureFilePermissions -Path $EncryptedPath)) {
+            return @{
+                Success = $false
+                Error = "Failed to set secure permissions on encrypted file"
+            }
+        }
+
+        # Verify encrypted file integrity by attempting to decrypt
+        Write-ClauverLog "Verifying encrypted file integrity..."
+        $integrityCheck = Test-EncryptedFileIntegrity -EncryptedPath $EncryptedPath
+        if (-not $integrityCheck.Success) {
+            # Clean up the corrupted encrypted file
+            Remove-Item -Path $EncryptedPath -Force -ErrorAction SilentlyContinue
+            return @{
+                Success = $false
+                Error = "Encrypted file integrity check failed: $($integrityCheck.Error)"
+            }
+        }
 
         # Remove plaintext file
         Remove-Item -Path $PlaintextPath -Force -ErrorAction SilentlyContinue
@@ -132,6 +151,7 @@ function Perform-Migration {
         Write-ClauverSuccess "Secrets successfully encrypted!"
         Write-Host "  Encrypted file: $(Sanitize-ClauverPath $EncryptedPath)" -ForegroundColor Green
         Write-Host "  Plaintext file: removed" -ForegroundColor Green
+        Write-Host "  Variables encrypted: $($integrityCheck.VariableCount)" -ForegroundColor Green
         Write-Host ""
         Write-ClauverWarn "IMPORTANT: Back up your age key at: $(Sanitize-ClauverPath $ageKeyPath)"
         Write-Host "Without this key, you cannot decrypt your secrets."
@@ -139,6 +159,7 @@ function Perform-Migration {
         return @{
             Success = $true
             EncryptedPath = $EncryptedPath
+            VariableCount = $integrityCheck.VariableCount
         }
     }
     catch {
