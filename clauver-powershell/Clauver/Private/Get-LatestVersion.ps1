@@ -52,7 +52,7 @@ except (json.JSONDecodeError, IndexError, KeyError) as e:
             $curlJob = Start-Job -ScriptBlock {
                 param($Url, $ConnectTimeout, $MaxTime)
                 try {
-                    $result = curl.exe -s --connect-timeout $ConnectTimeout --max-time $MaxTime $Url 2>$null
+                    $result = curl -s --connect-timeout $ConnectTimeout --max-time $MaxTime $Url 2>$null
                     return $result
                 } catch {
                     return $null
