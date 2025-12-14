@@ -120,15 +120,27 @@ function Get-ClauverProvider {
             }
         }
 
-        # Show not configured providers
-        Write-Host "$([char]27)[1;33mNot Configured:$([char]27)[0m"
+        # Show not configured providers (only if there are any)
+        $notConfiguredProviders = @()
         foreach ($provider in $standardProviders) {
             $keyName = "$($provider.ToUpper())_API_KEY"
             $apiKey = $secrets[$keyName]
 
             if (-not $apiKey) {
+                $notConfiguredProviders += $provider
+            }
+        }
+
+        # Only show "Not Configured:" section if there are providers that need configuration
+        if ($notConfiguredProviders.Count -gt 0) {
+            Write-Host "$([char]27)[1;33mNot Configured:$([char]27)[0m"
+            foreach ($provider in $notConfiguredProviders) {
                 Write-Host "  - $provider (run: clauver config $provider)"
             }
+        }
+        # If all providers are configured, add a helpful message instead of an empty section
+        elseif ($standardProviders.Count -gt 0 -and ($configuredProviders.Count + 1 -eq $standardProviders.Count)) {
+            Write-Host "$([char]27)[0;32mAll standard providers configured!$([char]27)[0m"
         }
     }
     catch {

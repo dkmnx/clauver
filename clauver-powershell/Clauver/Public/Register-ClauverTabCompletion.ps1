@@ -21,8 +21,11 @@ function Register-ClauverTabCompletion {
             }
         }
 
-        Write-Success "Clauver tab completion registered"
-        Write-Host "Restart PowerShell to use tab completion"
+        # Only show success message in verbose mode to avoid spam
+        if ($PSBoundParameters.Verbose) {
+            Write-Success "Clauver tab completion registered"
+            Write-Host "Restart PowerShell to use tab completion"
+        }
 
     } catch {
         Write-ClauverError "Failed to register tab completion: $_"
@@ -125,11 +128,13 @@ function Get-ProviderCompletions {
             $configPath = Join-Path (Get-ClauverHome) "config"
             if (Test-Path $configPath) {
                 $configContent = Get-Content $configPath -ErrorAction SilentlyContinue
-                $customProviders = $configContent | Where-Object { $_ -match "^custom_([^_]+)_api_key=" } |
-                    ForEach-Object {
+                $customProviders = @()
+                foreach ($line in $configContent) {
+                    if ($line -match "^custom_([^_]+)_api_key=") {
                         $providerName = $matches[1]
-                        @{ Text = $providerName; ToolTip = "Custom provider: $providerName" }
+                        $customProviders += @{ Text = $providerName; ToolTip = "Custom provider: $providerName" }
                     }
+                }
                 $providers += $customProviders
             }
         } catch {
@@ -155,11 +160,12 @@ function Get-CustomProviderCompletions {
         $configPath = Join-Path (Get-ClauverHome) "config"
         if (Test-Path $configPath) {
             $configContent = Get-Content $configPath -ErrorAction SilentlyContinue
-            $customProviders = $configContent | Where-Object { $_ -match "^custom_([^_]+)_api_key=" } |
-                ForEach-Object {
+            $customProviders = @()
+            foreach ($line in $configContent) {
+                if ($line -match "^custom_([^_]+)_api_key=") {
                     $providerName = $matches[1]
                     if ($providerName -like "$WordToComplete*") {
-                        @{
+                        $customProviders += @{
                             Text = $providerName
                             ListItemText = $providerName
                             CompletionType = [System.Management.Automation.CompletionResultType]::ParameterValue
@@ -167,6 +173,7 @@ function Get-CustomProviderCompletions {
                         }
                     }
                 }
+            }
             return $customProviders
         }
     } catch {
