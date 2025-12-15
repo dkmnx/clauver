@@ -16,6 +16,7 @@ function Invoke-ClauverProvider {
 
         # Handle anthropic specially (no API key needed)
         if ($Name -eq "anthropic") {
+            Show-ClauverBanner "Native Anthropic"
             Write-Host "Using Anthropic provider" -ForegroundColor Green
             # Launch claude with anthropic (direct API)
             & claude @ClaudeArgs
@@ -49,6 +50,25 @@ function Invoke-ClauverProvider {
                 $env:ANTHROPIC_BASE_URL = $baseUrl
                 $env:ANTHROPIC_AUTH_TOKEN = $apiKey
                 $env:ANTHROPIC_MODEL = $model
+
+                # Show provider banner (matching bash script behavior)
+                switch ($Name) {
+                    "zai" {
+                        Show-ClauverBanner "Zhipu AI ($model)"
+                    }
+                    "minimax" {
+                        Show-ClauverBanner "MiniMax ($model)"
+                    }
+                    "kimi" {
+                        Show-ClauverBanner "Moonshot AI ($model)"
+                    }
+                    "deepseek" {
+                        Show-ClauverBanner "DeepSeek AI ($model)"
+                    }
+                    default {
+                        Show-ClauverBanner "$Name"
+                    }
+                }
 
                 # Provider-specific model configuration (matching bash script)
                 switch ($Name) {
@@ -101,8 +121,6 @@ function Invoke-ClauverProvider {
                         $env:CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
                     }
                 }
-
-                Write-Host "Using $Name provider ($model)" -ForegroundColor Green
 
                 # Launch claude with the provider
                 & claude @ClaudeArgs
