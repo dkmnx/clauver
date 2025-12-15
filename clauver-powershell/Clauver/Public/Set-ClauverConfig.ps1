@@ -15,10 +15,42 @@ function Set-ClauverConfig {
     $config["${Name}_model"] = $model
     Write-ClauverConfig -Config $config
 
-    # Encrypt and store API key
+    # Encrypt and store API key in environment variable format (matching bash version)
     $secretsFile = Join-Path (Get-ClauverHome) "secrets.env.age"
     try {
-        $apiKey | Invoke-AgeEncrypt -OutputFile $secretsFile
+        # Load existing secrets if they exist
+        $existingSecrets = ""
+        if (Test-Path $secretsFile) {
+            try {
+                $existingSecrets = Invoke-AgeDecrypt -InputFile $secretsFile
+            } catch {
+                Write-ClauverLog "Could not load existing secrets, starting fresh"
+            }
+        }
+
+        # Process existing secrets and add new one
+        $allApiKeys = @()
+        
+        # Add existing API keys (if any)
+        if ($existingSecrets -and $existingSecrets.Trim()) {
+            # Split by newline and filter out empty lines
+            $secretsLines = $existingSecrets -split "`r`n|`n|`r" | Where-Object { $_.Trim() }
+            
+            # Remove any existing API key for this provider
+            $providerUpper = $Name.ToUpper()
+            $pattern = "^${providerUpper}_API_KEY="
+            $filteredLines = $secretsLines | Where-Object { $_ -notmatch $pattern }
+            $allApiKeys += $filteredLines
+        }
+        
+        # Add the new API key
+        $allApiKeys += "$($Name.ToUpper())_API_KEY=$apiKey"
+        
+        # Join with proper newlines
+        $updatedSecrets = $allApiKeys -join "`n"
+        
+        # Encrypt the updated secrets
+        Invoke-AgeEncrypt -Plaintext $updatedSecrets -OutputFile $secretsFile
         Write-ClauverSuccess "$Name provider configured successfully"
     } catch {
         Write-ClauverError "Failed to encrypt API key: $_"

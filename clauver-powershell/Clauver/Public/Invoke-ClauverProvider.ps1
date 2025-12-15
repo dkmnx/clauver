@@ -26,9 +26,10 @@ function Invoke-ClauverProvider {
         if (Test-Path $secretsFile) {
             try {
                 $secrets = Invoke-AgeDecrypt -InputFile $secretsFile
-                # Parse API key properly - split lines and find the key
+                # Parse API key properly - split lines and find the key in environment variable format
                 $lines = $secrets -split "`n"
-                $keyLine = $lines | Where-Object { $_ -match "^${Name}_api_key=" } | Select-Object -First 1
+                $varName = "$($Name.ToUpper())_API_KEY"
+                $keyLine = $lines | Where-Object { $_ -match "^${varName}=" } | Select-Object -First 1
                 $apiKey = if ($keyLine) {
                     ($keyLine -split '=', 2)[1].Trim().Trim('"', "'")
                 } else {
@@ -48,10 +49,42 @@ function Invoke-ClauverProvider {
                 $env:ANTHROPIC_BASE_URL = $baseUrl
                 $env:ANTHROPIC_AUTH_TOKEN = $apiKey
                 $env:ANTHROPIC_MODEL = $model
-                $env:ANTHROPIC_SMALL_FAST_MODEL = $model
-                $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = $model
-                $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $model
-                $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $model
+
+                # Provider-specific model configuration (matching bash script)
+                switch ($Name) {
+                    "zai" {
+                        # Z.AI uses different models for different roles
+                        $env:ANTHROPIC_SMALL_FAST_MODEL = "glm-4.5-air"
+                        $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "glm-4.5-air"
+                        $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $model
+                    }
+                    "minimax" {
+                        $env:ANTHROPIC_SMALL_FAST_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $model
+                    }
+                    "kimi" {
+                        $env:ANTHROPIC_SMALL_FAST_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $model
+                    }
+                    "deepseek" {
+                        $env:ANTHROPIC_SMALL_FAST_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $model
+                    }
+                    default {
+                        # Fallback for custom providers
+                        $env:ANTHROPIC_SMALL_FAST_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_HAIKU_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_SONNET_MODEL = $model
+                        $env:ANTHROPIC_DEFAULT_OPUS_MODEL = $model
+                    }
+                }
 
                 # Provider-specific settings
                 switch ($Name) {
