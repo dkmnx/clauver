@@ -43,7 +43,6 @@ function Set-StandardProviderConfig {
     Write-Host "$($Provider.ToUpper()) Configuration" -ForegroundColor White -BackgroundColor DarkBlue
 
     # Show current API key if exists
-    $config = Read-ClauverConfig
     $secrets = Get-ClauverSecrets
     $apiKeyVar = "${Provider}_api_key"
     $currentKey = $secrets[$apiKeyVar]
