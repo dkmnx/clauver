@@ -23,9 +23,6 @@ CONFIG_CACHE_LOADED=0
 # shellcheck disable=SC2034
 declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 
-# shellcheck disable=SC2016
-MATCH_SHELL_PATTERNS=('rm' '&&' '||' ';' '|' '`' '$(' '}' '&')
-
 # Configuration constants - extracted from hardcoded values
 declare -A PROVIDER_DEFAULTS=(
   ["zai_base_url"]="https://api.z.ai/api/anthropic"
@@ -134,15 +131,6 @@ validation_api_key() {
     ui_error "API key contains invalid characters"
     return 1
   fi
-
-  # Additional security checks
-  # Reject any shell command patterns
-  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
-    if [[ "$key" == *"$pattern"* ]]; then
-      ui_error "API key contains prohibited shell pattern: $pattern"
-      return 1
-    fi
-  done
 
   # Provider-specific validation
   case "$provider" in
@@ -594,8 +582,7 @@ load_decrypted_content_safely() {
   local old_ifs="$IFS"
 
   # Process line by line safely
-  IFS=$'\n'
-  for line in $content; do
+  while IFS= read -r line; do
     # Skip empty lines and comments
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
@@ -612,9 +599,11 @@ load_decrypted_content_safely() {
       esac
 
       # Security check: reject dangerous patterns in values
+      local dangerous_chars='[\|<>$]'
       if [[ "$var_value" =~ \$\(.*\) ]] || \
          [[ "$var_value" =~ \`.*\` ]] || \
-         [[ "$var_value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
+         [[ "$var_value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]] || \
+         [[ "$var_value" =~ $dangerous_chars ]]; then
         ui_error "Decrypted content contains potentially malicious code in value: $var_name"
         return 1
       fi
@@ -622,11 +611,10 @@ load_decrypted_content_safely() {
       # Export safely
       export "$var_name=$var_value"
     else
-      IFS="$old_ifs"
       ui_error "Invalid environment variable format: $line"
       return 1
     fi
-  done
+  done <<< "$content"
   IFS="$old_ifs"
   return 0
 }
@@ -657,22 +645,10 @@ load_secrets() {
     fi
 
     # Test decryption first to catch corruption early
-    local temp_decrypt
-    temp_decrypt=$(create_secure_temp_file "clauver_decrypt") || {
-      ui_error "Failed to create temporary file for decryption"
-      return 1
-    }
-    age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
-    local decrypt_pid=$!
-    wait "$decrypt_pid"
-
+    local decrypt_test
+    # Decrypt directly into memory
+    decrypt_test=$(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null)
     local decrypt_exit=$?
-    local decrypt_test=""
-
-    if [ -f "$temp_decrypt" ]; then
-      decrypt_test=$(cat "$temp_decrypt")
-      rm -f "$temp_decrypt"
-    fi
 
     if [ $decrypt_exit -ne 0 ]; then
       ui_error "Failed to decrypt secrets file"
@@ -703,7 +679,6 @@ load_secrets() {
       echo "  1. Verify your age key backup"
       echo "  2. Remove corrupted file: rm $(sanitize_path "$SECRETS_AGE")"
       echo "  3. Reconfigure providers: clauver config <provider>"
-      rm -f "$temp_decrypt"
       return 1
     fi
 
@@ -743,22 +718,11 @@ get_config() {
   # Ensure config is loaded into cache
   load_config_cache
 
-  # For keys with special characters (like hyphens), use file read to avoid array issues
-  if [[ "$key" =~ [-] ]]; then
-    if [ -f "$CONFIG" ]; then
-      local value
-      value=$(grep "^${key}=" "$CONFIG" 2>/dev/null | tail -1 | cut -d'=' -f2-)
-      echo "${value:-}"
-    else
-      echo ""
-    fi
+  # Use the cache with safe variable access
+  if [[ -v CONFIG_CACHE["$key"] ]]; then
+    echo "${CONFIG_CACHE[$key]}"
   else
-    # For normal keys, use the cache with safe variable access
-    if [[ -v CONFIG_CACHE["$key"] ]]; then
-      echo "${CONFIG_CACHE[$key]}"
-    else
-      echo ""
-    fi
+    echo ""
   fi
 }
 
@@ -1565,15 +1529,6 @@ validate_api_key() {
     return 1
   fi
 
-  # Additional security checks
-  # Reject any shell command patterns
-  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
-    if [[ "$key" == *"$pattern"* ]]; then
-      ui_error "API key contains prohibited shell pattern: $pattern"
-      return 1
-    fi
-  done
-
   # Provider-specific validation
   case "$provider" in
     "zai"|"minimax"|"kimi"|"deepseek")
@@ -1781,9 +1736,11 @@ validate_decrypted_content() {
     local value="${BASH_REMATCH[1]}"
 
     # Allow common API key characters but reject obviously dangerous patterns
+    local dangerous_chars='[\|<>$]'
     if [[ "$value" =~ \$\(.*\) ]] || \
        [[ "$value" =~ \`.*\` ]] || \
-       [[ "$value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
+       [[ "$value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]] || \
+       [[ "$value" =~ $dangerous_chars ]]; then
       ui_error "Decrypted content contains potentially malicious code in value"
       return 1
     fi
