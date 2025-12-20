@@ -7,13 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [1.12.1] - 2025-12-04
 
-### Fixed
-
-- Model name validation - Extended validation regex to support modern model identifier formats
-- Removed restrictive character limitations that prevented using provider/model:tag formats
-- Fixed validation for model names containing forward slashes (/) and colons (:)
-- Cleaned up unused `validation_model_name()` function that contained outdated validation logic
-
 ### Improved
 
 - Enhanced model name compatibility - Now supports common model naming patterns:
@@ -23,7 +16,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Maintained security validation - Dangerous characters still properly rejected
 - Updated version references across documentation and installation scripts
 
+### Fixed
+
+- Model name validation - Extended validation regex to support modern model identifier formats
+- Removed restrictive character limitations that prevented using provider/model:tag formats
+- Fixed validation for model names containing forward slashes (/) and colons (:)
+- Cleaned up unused `validation_model_name()` function that contained outdated validation logic
+
 ## [1.12.0] - 2025-11-23
+
+### Added
+
+- Consistent naming conventions - All new module functions follow `module_function` naming pattern
+- Enhanced test coverage - Added 4 new comprehensive test suites with 75+ additional test cases
+- Improved security validation - Multi-layer security checks across all validation functions
+- Automatic cache management - Intelligent cache invalidation prevents stale configuration issues
+- Enhanced temp file handling - Secure temporary file creation with automatic cleanup
+- Enhanced crypto operations - Convenient wrapper functions for encryption/decryption operations
+- Comprehensive shellcheck compliance - All code passes shellcheck with zero warnings or errors
+
+### Improved
+
+- Code organization - Clear separation of concerns with well-defined module boundaries
+- Maintainability - Modular architecture makes code easier to understand and modify
+- Testability - Isolated module testing enables comprehensive test coverage
+- Security - Centralized validation and crypto functions reduce security surface area
+- Performance - Optimized caching and file management improve operational efficiency
+- Developer experience - Consistent API patterns make the codebase easier to work with
+- Backward compatibility - All existing function names continue to work without breaking changes
 
 ### Refactored
 
@@ -50,38 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `test_config_module.sh` - Configuration management testing
   - `test_crypto_module.sh` - Cryptographic operations testing
 
-### Added
-
-- Consistent naming conventions - All new module functions follow `module_function` naming pattern
-- Enhanced test coverage - Added 4 new comprehensive test suites with 75+ additional test cases
-- Improved security validation - Multi-layer security checks across all validation functions
-- Automatic cache management - Intelligent cache invalidation prevents stale configuration issues
-- Enhanced temp file handling - Secure temporary file creation with automatic cleanup
-- Enhanced crypto operations - Convenient wrapper functions for encryption/decryption operations
-- Comprehensive shellcheck compliance - All code passes shellcheck with zero warnings or errors
-
-### Improved
-
-- Code organization - Clear separation of concerns with well-defined module boundaries
-- Maintainability - Modular architecture makes code easier to understand and modify
-- Testability - Isolated module testing enables comprehensive test coverage
-- Security - Centralized validation and crypto functions reduce security surface area
-- Performance - Optimized caching and file management improve operational efficiency
-- Developer experience - Consistent API patterns make the codebase easier to work with
-- Backward compatibility - All existing function names continue to work without breaking changes
-
 ## [1.11.2] - 2025-11-23
-
-### Security
-
-- Critical security hardening - Added comprehensive protection against command injection and path disclosure vulnerabilities
-- Path sanitization - Implemented robust input sanitization to prevent information disclosure in error messages
-- SSRF protection - Added Server-Side Request Forgery protection for URL validation to block internal network access
-- Secure temporary file handling - Enhanced temporary file creation with proper permissions and validation
-- Safe environment loading - Replaced unsafe `source()` calls with secure environment variable loading mechanisms
-- Background process security - Improved background process cleanup with PID validation and enhanced signal handling
-- API key validation hardening - Strengthened API key and URL validation against injection attacks
-- Enhanced trap management - Improved signal handling and process cleanup security
 
 ### Added
 
@@ -107,19 +96,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unsafe environment loading - Replaced dangerous `source()` usage with secure alternatives
 - Background process cleanup - Fixed PID validation and enhanced process termination security
 
-## [1.11.1] - 2025-11-23
-
 ### Security
 
-- Critical security enhancement - Added comprehensive validation for decrypted secrets content to prevent
-  execution of malicious code
-- Decrypted content validation - New `validate_decrypted_content()` function performs multiple security checks:
-  - Detection of error indicators and corruption patterns
-  - Rejection of dangerous bash constructs (`$,`, (), [], {}, ;, &, |, <, >`)
-  - Strict validation of environment variable format (`KEY=value`)
-  - Prevention of command injection and substitution attacks
-- Enhanced error handling - Detailed recovery instructions when validation fails
-- Memory-only security - Secrets are only decrypted in memory and validated before execution
+- Critical security hardening - Added comprehensive protection against command injection and path disclosure vulnerabilities
+- Path sanitization - Implemented robust input sanitization to prevent information disclosure in error messages
+- SSRF protection - Added Server-Side Request Forgery protection for URL validation to block internal network access
+- Secure temporary file handling - Enhanced temporary file creation with proper permissions and validation
+- Safe environment loading - Replaced unsafe `source()` calls with secure environment variable loading mechanisms
+- Background process security - Improved background process cleanup with PID validation and enhanced signal handling
+- API key validation hardening - Strengthened API key and URL validation against injection attacks
+- Enhanced trap management - Improved signal handling and process cleanup security
+
+## [1.11.1] - 2025-11-23
 
 ### Added
 
@@ -136,13 +124,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - False positive prevention - Improved error detection patterns to avoid false positives with valid variable names
 - Comprehensive input sanitization - Multi-layer validation prevents various attack vectors
 
+### Security
+
+- Critical security enhancement - Added comprehensive validation for decrypted secrets content to prevent
+  execution of malicious code
+- Decrypted content validation - New `validate_decrypted_content()` function performs multiple security checks:
+  - Detection of error indicators and corruption patterns
+  - Rejection of dangerous bash constructs (`$,`, (), [], {}, ;, &, |, <, >`)
+  - Strict validation of environment variable format (`KEY=value`)
+  - Prevention of command injection and substitution attacks
+- Enhanced error handling - Detailed recovery instructions when validation fails
+- Memory-only security - Secrets are only decrypted in memory and validated before execution
+
 ## [1.11.0] - 2025-11-22
 
-### Fixed
+### Improved
 
-- CI/CD workflow efficiency - removed redundant SHA256 validation job and optimized artifact upload process
-- Release process documentation - cleaned up outdated release steps and streamlined release notes generation
-- Security clarification - emphasized that secrets are only decrypted in memory and never written to disk
+- File permissions consistency - updated all test scripts to have executable permissions
+- README organization - moved credits section to the end for better documentation flow
+- GitHub Actions workflow - upgraded to actions/upload-artifact v4 for improved reliability
 
 ### Refactored
 
@@ -150,11 +150,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Code cleanup and validation - improved error handling and cleanup processes in clauver.sh
 - Release script improvements - enhanced validation, better error handling, and improved project root detection
 
-### Improved
+### Fixed
 
-- File permissions consistency - updated all test scripts to have executable permissions
-- README organization - moved credits section to the end for better documentation flow
-- GitHub Actions workflow - upgraded to actions/upload-artifact v4 for improved reliability
+- CI/CD workflow efficiency - removed redundant SHA256 validation job and optimized artifact upload process
+- Release process documentation - cleaned up outdated release steps and streamlined release notes generation
+- Security clarification - emphasized that secrets are only decrypted in memory and never written to disk
 
 ## [1.10.0] - 2025-11-22
 
@@ -167,12 +167,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive release testing - `tests/test_release.sh` with full test coverage for release functionality
 - Release process documentation - detailed installation instructions and workflow integration
 
-### Security
-
-- SHA256 checksum verification - cryptographic integrity validation for all release artifacts
-- Version format validation - enforced semantic versioning (v{major}.{minor}.{patch}) format
-- Security-focused release process - automated artifact verification and validation
-
 ### Improved
 
 - CI/CD workflow integration - enhanced GitHub Actions workflow with release artifact generation
@@ -181,12 +175,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documentation updates - enhanced README with release process instructions
 - Shellcheck compliance - resolved warnings in release test files
 
+### Security
+
+- SHA256 checksum verification - cryptographic integrity validation for all release artifacts
+- Version format validation - enforced semantic versioning (v{major}.{minor}.{patch}) format
+- Security-focused release process - automated artifact verification and validation
+
 ## [1.9.2] - 2025-11-22
 
-### Fixed
+### Improved
 
-- Configuration cache reload - resolved provider model configuration not taking effect immediately after changes
-- Provider banner display - fixed model information not showing correctly in provider switching banners
+- Dynamic model configuration - ZAI, MiniMax, DeepSeek, and Kimi providers now support configurable models
+- Configuration cache management - improved cache invalidation and reload logic for real-time configuration updates
+- Provider switching UX - enhanced provider banners to display current model information
 
 ### Refactored
 
@@ -195,20 +196,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Enhanced extensibility - enabled easier addition of new providers through configuration metadata system
 - Reduced code duplication - consolidated provider configuration logic into reusable components
 
-### Improved
+### Fixed
 
-- Dynamic model configuration - ZAI, MiniMax, DeepSeek, and Kimi providers now support configurable models
-- Configuration cache management - improved cache invalidation and reload logic for real-time configuration updates
-- Provider switching UX - enhanced provider banners to display current model information
+- Configuration cache reload - resolved provider model configuration not taking effect immediately after changes
+- Provider banner display - fixed model information not showing correctly in provider switching banners
 
 ## [1.9.1] - 2025-11-22
 
-### Fixed
+### Added
 
-- Critical test framework fixes - resolved CLAUVER_HOME initialization order causing mktemp permission errors
-- DeepSeek provider validation - added "deepseek" to reserved provider names list to prevent conflicts
-- Test isolation improvements - proper clauver.sh sourcing pattern for test environment setup
-- Utilities test framework - fixed missing clauver.sh source causing validation function failures
+- DeepSeek test visibility - DeepSeek-specific test output now appears in all relevant test suites
+- Performance constants validation - DeepSeek API timeout settings validation
+- Provider defaults verification - DeepSeek configuration defaults testing
 
 ### Improved
 
@@ -217,11 +216,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Test reliability - eliminated permission errors and initialization race conditions
 - Documentation formatting - improved test README readability with better visual separation
 
-### Added
+### Fixed
 
-- DeepSeek test visibility - DeepSeek-specific test output now appears in all relevant test suites
-- Performance constants validation - DeepSeek API timeout settings validation
-- Provider defaults verification - DeepSeek configuration defaults testing
+- Critical test framework fixes - resolved CLAUVER_HOME initialization order causing mktemp permission errors
+- DeepSeek provider validation - added "deepseek" to reserved provider names list to prevent conflicts
+- Test isolation improvements - proper clauver.sh sourcing pattern for test environment setup
+- Utilities test framework - fixed missing clauver.sh source causing validation function failures
 
 ## [1.9.0] - 2025-11-22
 
@@ -250,17 +250,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Performance benchmark job running in containerized environment
 - CI workflow badge to README
 
+### Improved
+
+- Enhanced testing documentation
+- Removed report job from test workflow for cleaner CI output
+
 ### Fixed
 
 - Test reliability improvements and environment setup
 - Shellcheck warnings in test files resolved
 - Variable assignment clarity in syntax checks
 - Makefile output improvements with graceful error handling
-
-### Improved
-
-- Enhanced testing documentation
-- Removed report job from test workflow for cleaner CI output
 
 ## [1.7.0] - 2025-11-15
 
@@ -269,6 +269,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive testing documentation to README
 - Shell completion updates with new commands and options
 - Troubleshooting guide extraction and documentation reorganization
+
+### Improved
+
+- Provider configuration and performance defaults
+- Configuration and provider switching logic modularization
+- Security scanning with manual gitleaks installation
+- Test framework renamed for consistency (test-framework.sh → test_framework.sh)
 
 ### Removed
 
@@ -282,13 +289,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unused variables in test scripts
 - Shellcheck warnings across test files
 - Sensitive test artifacts tracking (improved .gitignore)
-
-### Improved
-
-- Provider configuration and performance defaults
-- Configuration and provider switching logic modularization
-- Security scanning with manual gitleaks installation
-- Test framework renamed for consistency (test-framework.sh → test_framework.sh)
 
 ## [1.6.1] - 2025-11-15
 
@@ -433,3 +433,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Encrypted API key management
 - Configuration testing and status monitoring
 - Quick setup wizard for beginners
+
+[1.12.1]: https://github.com/dkmnx/clauver/compare/v1.12.0...v1.12.1
+[1.12.0]: https://github.com/dkmnx/clauver/compare/v1.11.2...v1.12.0
+[1.11.2]: https://github.com/dkmnx/clauver/compare/v1.11.1...v1.11.2
+[1.11.1]: https://github.com/dkmnx/clauver/compare/v1.11.0...v1.11.1
+[1.11.0]: https://github.com/dkmnx/clauver/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/dkmnx/clauver/compare/v1.9.2...v1.10.0
+[1.9.2]: https://github.com/dkmnx/clauver/compare/v1.9.1...v1.9.2
+[1.9.1]: https://github.com/dkmnx/clauver/compare/v1.9.0...v1.9.1
+[1.9.0]: https://github.com/dkmnx/clauver/compare/v1.8.0...v1.9.0
+[1.8.0]: https://github.com/dkmnx/clauver/compare/v1.7.0...v1.8.0
+[1.7.0]: https://github.com/dkmnx/clauver/compare/v1.6.1...v1.7.0
+[1.6.1]: https://github.com/dkmnx/clauver/compare/v1.6.0...v1.6.1
+[1.6.0]: https://github.com/dkmnx/clauver/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/dkmnx/clauver/compare/v1.4.1...v1.5.0
+[1.4.1]: https://github.com/dkmnx/clauver/compare/v1.4.0...v1.4.1
+[1.4.0]: https://github.com/dkmnx/clauver/compare/v1.3.1...v1.4.0
+[1.3.1]: https://github.com/dkmnx/clauver/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/dkmnx/clauver/compare/v1.2.3...v1.3.0
+[1.2.3]: https://github.com/dkmnx/clauver/compare/v1.2.2...v1.2.3
+[1.2.2]: https://github.com/dkmnx/clauver/compare/v1.2.1...v1.2.2
+[1.2.1]: https://github.com/dkmnx/clauver/compare/v1.2.0...v1.2.1
+[1.2.0]: https://github.com/dkmnx/clauver/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/dkmnx/clauver/compare/v1.0.1...v1.1.0
+[1.0.1]: https://github.com/dkmnx/clauver/compare/v1.0.0...v1.0.1
+[1.0.0]: https://github.com/dkmnx/clauver/releases/tag/v1.0.0
