@@ -5,15 +5,40 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.2] - 2025-12-20
+
+### Changed
+
+- Test coverage - Enhanced validation test coverage with comprehensive test cases for API key validation
+- Security validation - Improved dangerous character detection in content validation functions
+- Code organization - Simplified content validation logic and removed redundant validation patterns
+- Documentation - Reorganized changelog sections to maintain logical grouping of changes
+
+### Fixed
+
+- Test references - Updated version references from v1.12.0 to v1.12.1 in banner tests
+- Validation testing - Fixed function name consistency in model validation tests
+- API key validation - Ensured validation correctly handles keys containing 'rm' substring
+- Version links - Fixed broken reference links by placing them after all changelog content
+
+### Security
+
+- Streamlined content validation and security checks:
+  - Removed redundant MATCH_SHELL_PATTERNS array validation
+  - Enhanced dangerous character detection in validate_decrypted_content
+  - Simplified load_secrets decryption process using direct memory operations
+  - Improved get_config function to use unified cache access pattern
+  - Refined load_decrypted_content_safely with proper line-by-line processing
+  - Removed temporary file usage in load_secrets for better security
+
 ## [1.12.1] - 2025-12-04
 
-### Improved
+### Changed
 
 - Enhanced model name compatibility - Now supports common model naming patterns:
   - Provider/model format (e.g., `openai/gpt-4`)
   - Model:tag format (e.g., `amazon/nova-2-lite-v1:free`)
   - Traditional model names (e.g., `glm-4.6`, `MiniMax-M2`)
-- Maintained security validation - Dangerous characters still properly rejected
 - Updated version references across documentation and installation scripts
 
 ### Fixed
