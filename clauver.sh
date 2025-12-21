@@ -1173,15 +1173,28 @@ cmd_list() {
     done < "$CONFIG"
   fi
 
-  echo -e "${YELLOW}Not Configured:${NC}"
+  local has_unconfigured=false
   for provider in zai minimax kimi deepseek; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
     if [ -z "$api_key" ]; then
-      echo "  - $provider (run: clauver config $provider)"
+      has_unconfigured=true
+      break
     fi
   done
+
+  if [ "$has_unconfigured" = true ]; then
+    echo -e "${YELLOW}Not Configured:${NC}"
+    for provider in zai minimax kimi deepseek; do
+      local key_name="${provider^^}_API_KEY"
+      local api_key
+      api_key="$(get_secret "$key_name")"
+      if [ -z "$api_key" ]; then
+        echo "  - $provider (run: clauver config $provider)"
+      fi
+    done
+  fi
 }
 
 # Helper functions for configuration
