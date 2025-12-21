@@ -5,6 +5,13 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.4] - 2025-12-21
+
+### Improved
+
+- List command output - Enhanced `clauver list` command to hide "Not Configured:" section when all providers are
+properly configured, resulting in cleaner output and improved user experience
+
 ## [1.12.3] - 2025-12-21
 
 ### Refactored
@@ -475,6 +482,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration testing and status monitoring
 - Quick setup wizard for beginners
 
+[1.12.4]: https://github.com/dkmnx/clauver/compare/v1.12.3...v1.12.4
 [1.12.3]: https://github.com/dkmnx/clauver/compare/v1.12.2...v1.12.3
 [1.12.2]: https://github.com/dkmnx/clauver/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/dkmnx/clauver/compare/v1.12.0...v1.12.1
