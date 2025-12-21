@@ -5,6 +5,22 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.3] - 2025-12-21
+
+### Refactored
+
+- Provider configuration - Consolidated provider configuration logic with metadata-driven approach using
+  PROVIDER_METADATA and PROVIDER_ENV_VARS arrays
+- Environment setup - Extracted common environment setup into setup_provider_environment() function to reduce code duplication
+- Provider implementations - Replaced hardcoded switch cases with metadata-driven approach for zai, minimax, kimi,
+  and deepseek providers while maintaining identical functionality
+
+### Added
+
+- Comprehensive test coverage - Added detailed tests for provider metadata functionality and
+  setup_provider_environment function
+- Enhanced provider environment tests - Added detailed assertions for each provider's specific configuration variables
+
 ## [1.12.2] - 2025-12-20
 
 ### Changed
@@ -459,6 +475,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Configuration testing and status monitoring
 - Quick setup wizard for beginners
 
+[1.12.3]: https://github.com/dkmnx/clauver/compare/v1.12.2...v1.12.3
+[1.12.2]: https://github.com/dkmnx/clauver/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/dkmnx/clauver/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/dkmnx/clauver/compare/v1.11.2...v1.12.0
 [1.11.2]: https://github.com/dkmnx/clauver/compare/v1.11.1...v1.11.2
