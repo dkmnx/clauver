@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 umask 077
 
-VERSION="1.12.1"
+VERSION="1.12.4"
 
 # Test mode detection - skip global config when running tests
 if [[ "${CLAUVER_TEST_MODE:-}" == "1" ]]; then
@@ -23,9 +23,6 @@ CONFIG_CACHE_LOADED=0
 # shellcheck disable=SC2034
 declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 
-# shellcheck disable=SC2016
-MATCH_SHELL_PATTERNS=('rm' '&&' '||' ';' '|' '`' '$(' '}' '&')
-
 # Configuration constants - extracted from hardcoded values
 declare -A PROVIDER_DEFAULTS=(
   ["zai_base_url"]="https://api.z.ai/api/anthropic"
@@ -37,6 +34,21 @@ declare -A PROVIDER_DEFAULTS=(
   ["deepseek_base_url"]="https://api.deepseek.com/anthropic"
   ["deepseek_default_model"]="deepseek-chat"
 )
+
+declare -A PROVIDER_METADATA=(
+  ["zai"]="Z.AI|zai_base_url|ZAI_API_KEY|zai_model|zai_default_model|glm-4.5-air"
+  ["minimax"]="MiniMax|minimax_base_url|MINIMAX_API_KEY|minimax_model|minimax_default_model|MiniMax-M2"
+  ["kimi"]="Moonshot AI|kimi_base_url|KIMI_API_KEY|kimi_model|kimi_default_model|kimi-for-coding"
+  ["deepseek"]="DeepSeek AI|deepseek_base_url|DEEPSEEK_API_KEY|deepseek_model|deepseek_default_model|deepseek-chat"
+)
+
+declare -A PROVIDER_ENV_VARS=(
+  ["zai"]="ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air"
+  ["minimax"]="ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT=minimax_small_fast_timeout,ANTHROPIC_SMALL_FAST_MAX_TOKENS=minimax_small_fast_max_tokens"
+  ["kimi"]="ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT=kimi_small_fast_timeout,ANTHROPIC_SMALL_FAST_MAX_TOKENS=kimi_small_fast_max_tokens"
+  ["deepseek"]="API_TIMEOUT_MS=deepseek_api_timeout_ms,CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1"
+)
+
 
 # Timeout and token limits
 declare -A PERFORMANCE_DEFAULTS=(
@@ -134,15 +146,6 @@ validation_api_key() {
     ui_error "API key contains invalid characters"
     return 1
   fi
-
-  # Additional security checks
-  # Reject any shell command patterns
-  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
-    if [[ "$key" == *"$pattern"* ]]; then
-      ui_error "API key contains prohibited shell pattern: $pattern"
-      return 1
-    fi
-  done
 
   # Provider-specific validation
   case "$provider" in
@@ -594,8 +597,7 @@ load_decrypted_content_safely() {
   local old_ifs="$IFS"
 
   # Process line by line safely
-  IFS=$'\n'
-  for line in $content; do
+  while IFS= read -r line; do
     # Skip empty lines and comments
     [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
 
@@ -612,9 +614,11 @@ load_decrypted_content_safely() {
       esac
 
       # Security check: reject dangerous patterns in values
+      local dangerous_chars='[\|<>$]'
       if [[ "$var_value" =~ \$\(.*\) ]] || \
          [[ "$var_value" =~ \`.*\` ]] || \
-         [[ "$var_value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
+         [[ "$var_value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]] || \
+         [[ "$var_value" =~ $dangerous_chars ]]; then
         ui_error "Decrypted content contains potentially malicious code in value: $var_name"
         return 1
       fi
@@ -622,11 +626,10 @@ load_decrypted_content_safely() {
       # Export safely
       export "$var_name=$var_value"
     else
-      IFS="$old_ifs"
       ui_error "Invalid environment variable format: $line"
       return 1
     fi
-  done
+  done <<< "$content"
   IFS="$old_ifs"
   return 0
 }
@@ -657,22 +660,10 @@ load_secrets() {
     fi
 
     # Test decryption first to catch corruption early
-    local temp_decrypt
-    temp_decrypt=$(create_secure_temp_file "clauver_decrypt") || {
-      ui_error "Failed to create temporary file for decryption"
-      return 1
-    }
-    age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null > "$temp_decrypt" 2>&1 &
-    local decrypt_pid=$!
-    wait "$decrypt_pid"
-
+    local decrypt_test
+    # Decrypt directly into memory
+    decrypt_test=$(age -d -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null)
     local decrypt_exit=$?
-    local decrypt_test=""
-
-    if [ -f "$temp_decrypt" ]; then
-      decrypt_test=$(cat "$temp_decrypt")
-      rm -f "$temp_decrypt"
-    fi
 
     if [ $decrypt_exit -ne 0 ]; then
       ui_error "Failed to decrypt secrets file"
@@ -703,7 +694,6 @@ load_secrets() {
       echo "  1. Verify your age key backup"
       echo "  2. Remove corrupted file: rm $(sanitize_path "$SECRETS_AGE")"
       echo "  3. Reconfigure providers: clauver config <provider>"
-      rm -f "$temp_decrypt"
       return 1
     fi
 
@@ -743,22 +733,11 @@ get_config() {
   # Ensure config is loaded into cache
   load_config_cache
 
-  # For keys with special characters (like hyphens), use file read to avoid array issues
-  if [[ "$key" =~ [-] ]]; then
-    if [ -f "$CONFIG" ]; then
-      local value
-      value=$(grep "^${key}=" "$CONFIG" 2>/dev/null | tail -1 | cut -d'=' -f2-)
-      echo "${value:-}"
-    else
-      echo ""
-    fi
+  # Use the cache with safe variable access
+  if [[ -v CONFIG_CACHE["$key"] ]]; then
+    echo "${CONFIG_CACHE[$key]}"
   else
-    # For normal keys, use the cache with safe variable access
-    if [[ -v CONFIG_CACHE["$key"] ]]; then
-      echo "${CONFIG_CACHE[$key]}"
-    else
-      echo ""
-    fi
+    echo ""
   fi
 }
 
@@ -1194,15 +1173,28 @@ cmd_list() {
     done < "$CONFIG"
   fi
 
-  echo -e "${YELLOW}Not Configured:${NC}"
+  local has_unconfigured=false
   for provider in zai minimax kimi deepseek; do
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
     if [ -z "$api_key" ]; then
-      echo "  - $provider (run: clauver config $provider)"
+      has_unconfigured=true
+      break
     fi
   done
+
+  if [ "$has_unconfigured" = true ]; then
+    echo -e "${YELLOW}Not Configured:${NC}"
+    for provider in zai minimax kimi deepseek; do
+      local key_name="${provider^^}_API_KEY"
+      local api_key
+      api_key="$(get_secret "$key_name")"
+      if [ -z "$api_key" ]; then
+        echo "  - $provider (run: clauver config $provider)"
+      fi
+    done
+  fi
 }
 
 # Helper functions for configuration
@@ -1409,11 +1401,7 @@ cmd_config() {
 }
 
 # Provider abstraction layer
-declare -A PROVIDER_CONFIGS=(
-  ["zai"]="Z.AI|https://api.z.ai/api/anthropic|ZAI_API_KEY|glm-4.5-air|glm-4.6|glm-4.6"
-  ["minimax"]="MiniMax|https://api.minimax.io/anthropic|MINIMAX_API_KEY|MiniMax-M2|MiniMax-M2|MiniMax-M2"
-  ["deepseek"]="DeepSeek|https://api.deepseek.com/anthropic|DEEPSEEK_API_KEY|deepseek-chat|deepseek-chat|deepseek-chat"
-)
+
 
 # Provider configuration metadata
 declare -A PROVIDER_REQUIRES=(
@@ -1422,6 +1410,51 @@ declare -A PROVIDER_REQUIRES=(
   ["deepseek"]="api_key,model,url"
   ["kimi"]="api_key,model,url"
 )
+
+setup_provider_environment() {
+  local provider="$1"
+  local api_key="$2"
+  local model="$3"
+  local url="$4"
+
+  IFS='|' read -ra metadata <<< "${PROVIDER_METADATA[$provider]}"
+  local display_name="${metadata[0]}"
+  local base_url_key="${metadata[1]}"
+  local model_key="${metadata[3]}"
+  local default_model_key="${metadata[4]}"
+  local haiku_model="${metadata[5]}"
+
+  local final_url="${url:-${PROVIDER_DEFAULTS[$base_url_key]}}"
+  local final_model="${model:-$(get_config "${model_key}")}"
+  final_model="${final_model:-${PROVIDER_DEFAULTS[$default_model_key]}}"
+
+  ui_banner "$display_name ($final_model)"
+
+  export ANTHROPIC_BASE_URL="$final_url"
+  export ANTHROPIC_AUTH_TOKEN="$api_key"
+  export ANTHROPIC_MODEL="$final_model"
+  export ANTHROPIC_DEFAULT_HAIKU_MODEL="${haiku_model:-$final_model}"
+  export ANTHROPIC_DEFAULT_SONNET_MODEL="$final_model"
+  export ANTHROPIC_DEFAULT_OPUS_MODEL="$final_model"
+  export ANTHROPIC_SMALL_FAST_MODEL="$final_model"
+
+  local env_vars="${PROVIDER_ENV_VARS[$provider]:-}"
+  if [ -n "$env_vars" ]; then
+    IFS=',' read -ra var_assignments <<< "$env_vars"
+    for assignment in "${var_assignments[@]}"; do
+      if [[ "$assignment" == *"="* ]]; then
+        local var_name="${assignment%%=*}"
+        local var_value="${assignment#*=}"
+
+        if [[ "$var_value" == *"_"* ]]; then
+          var_value="${PERFORMANCE_DEFAULTS[$var_value]:-$var_value}"
+        fi
+
+        export "$var_name=$var_value"
+      fi
+    done
+  fi
+}
 
 # Generic provider switching function
 switch_to_provider() {
@@ -1439,104 +1472,27 @@ switch_to_provider() {
   fi
 
   # Check if provider is supported
-  if ! [[ -v "PROVIDER_CONFIGS[$provider]" ]] && [ "$provider" != "kimi" ]; then
+  if ! [[ -v "PROVIDER_METADATA[$provider]" ]]; then
     ui_error "Provider '$provider' not supported"
     exit 1
   fi
 
   load_secrets
 
-  # Validate required configuration
-  local requirements="${PROVIDER_REQUIRES[$provider]:-api_key}"
-  IFS=',' read -ra required_fields <<< "$requirements"
+  local key_var="${provider^^}_API_KEY"
+  local api_key
+  api_key="$(get_secret "$key_var")"
+  if [ -z "$api_key" ]; then
+    ui_error "${provider^^} not configured. Run: clauver config $provider"
+    exit 1
+  fi
 
-  for field in "${required_fields[@]}"; do
-    case "$field" in
-      "api_key")
-        local key_var="${provider^^}_API_KEY"
-        local api_key
-        api_key="$(get_secret "$key_var")"
-        if [ -z "$api_key" ]; then
-          ui_error "${provider^^} not configured. Run: clauver config $provider"
-          exit 1
-        fi
-        ;;
-            "model")
-        local model
-        model="$(get_config "${provider}_model")"
-        if [ "$provider" = "kimi" ]; then
-          model="${model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
-        fi
-        ;;
-      "url")
-        local url
-        url="$(get_config "${provider}_base_url")"
-        if [ "$provider" = "kimi" ]; then
-          url="${url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
-        fi
-        ;;
-    esac
-  done
+  local model
+  model="$(get_config "${provider}_model")"
+  local url
+  url="$(get_config "${provider}_base_url")"
 
-  # Set provider-specific environment
-  case "$provider" in
-    "zai")
-      local zai_model
-      zai_model="$(get_config \"zai_model\")"
-      zai_model="${zai_model:-${PROVIDER_DEFAULTS[zai_default_model]}}"
-      ui_banner "Zhipu AI ($zai_model)"
-      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
-      export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="glm-4.5-air"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="$zai_model"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="$zai_model"
-      ;;
-    "minimax")
-      local minimax_model
-      minimax_model="$(get_config \"minimax_model\")"
-      minimax_model="${minimax_model:-${PROVIDER_DEFAULTS[minimax_default_model]}}"
-      ui_banner "MiniMax ($minimax_model)"
-      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
-      export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="$minimax_model"
-      export ANTHROPIC_SMALL_FAST_MODEL="$minimax_model"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$minimax_model"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="$minimax_model"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="$minimax_model"
-      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[minimax_small_fast_timeout]}"
-      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[minimax_small_fast_max_tokens]}"
-      ;;
-    "kimi")
-      local kimi_model
-      kimi_model="$(get_config \"kimi_model\")"
-      kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
-      ui_banner "Moonshot AI ($kimi_model)"
-      export ANTHROPIC_BASE_URL="$url"
-      export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="$kimi_model"
-      export ANTHROPIC_SMALL_FAST_MODEL="$kimi_model"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$kimi_model"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="$kimi_model"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="$kimi_model"
-      export ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT="${PERFORMANCE_DEFAULTS[kimi_small_fast_timeout]}"
-      export ANTHROPIC_SMALL_FAST_MAX_TOKENS="${PERFORMANCE_DEFAULTS[kimi_small_fast_max_tokens]}"
-      ;;
-    "deepseek")
-      local deepseek_model
-      deepseek_model="$(get_config deepseek_model)"
-      deepseek_model="${deepseek_model:-${PROVIDER_DEFAULTS[deepseek_default_model]}}"
-      ui_banner "DeepSeek AI ($deepseek_model)"
-      export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
-      export ANTHROPIC_AUTH_TOKEN="$api_key"
-      export ANTHROPIC_MODEL="$deepseek_model"
-      export ANTHROPIC_SMALL_FAST_MODEL="$deepseek_model"
-      export ANTHROPIC_DEFAULT_HAIKU_MODEL="$deepseek_model"
-      export ANTHROPIC_DEFAULT_SONNET_MODEL="$deepseek_model"
-      export ANTHROPIC_DEFAULT_OPUS_MODEL="$deepseek_model"
-      export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[deepseek_api_timeout_ms]}"
-      export CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1"
-      ;;
-      esac
+  setup_provider_environment "$provider" "$api_key" "$model" "$url"
 
   exec claude "$@"
 }
@@ -1564,15 +1520,6 @@ validate_api_key() {
     ui_error "API key contains invalid characters"
     return 1
   fi
-
-  # Additional security checks
-  # Reject any shell command patterns
-  for pattern in "${MATCH_SHELL_PATTERNS[@]}"; do
-    if [[ "$key" == *"$pattern"* ]]; then
-      ui_error "API key contains prohibited shell pattern: $pattern"
-      return 1
-    fi
-  done
 
   # Provider-specific validation
   case "$provider" in
@@ -1781,9 +1728,11 @@ validate_decrypted_content() {
     local value="${BASH_REMATCH[1]}"
 
     # Allow common API key characters but reject obviously dangerous patterns
+    local dangerous_chars='[\|<>$]'
     if [[ "$value" =~ \$\(.*\) ]] || \
        [[ "$value" =~ \`.*\` ]] || \
-       [[ "$value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]]; then
+       [[ "$value" =~ (rm|mv|cp|chmod|chown)[[:space:]] ]] || \
+       [[ "$value" =~ $dangerous_chars ]]; then
       ui_error "Decrypted content contains potentially malicious code in value"
       return 1
     fi
@@ -1847,7 +1796,6 @@ cmd_test() {
       fi
       ;;
     zai|minimax|kimi|deepseek)
-      # Load secrets
       load_secrets
 
       local key_name="${provider^^}_API_KEY"
@@ -1859,31 +1807,14 @@ cmd_test() {
       fi
       echo -e "${BOLD}Testing ${provider^^}${NC}"
 
-      export ANTHROPIC_AUTH_TOKEN="$api_key"
-      case "$provider" in
-        zai)
-          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[zai_base_url]}"
-          ;;
-        minimax)
-          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[minimax_base_url]}"
-          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
-          ;;
-        kimi)
-          local kimi_base_url
-          kimi_base_url="$(get_config "kimi_base_url")"
-          kimi_base_url="${kimi_base_url:-${PROVIDER_DEFAULTS[kimi_base_url]}}"
-          export ANTHROPIC_BASE_URL="$kimi_base_url"
-          local kimi_model
-          kimi_model="$(get_config "kimi_model")"
-          kimi_model="${kimi_model:-${PROVIDER_DEFAULTS[kimi_default_model]}}"
-          export ANTHROPIC_MODEL="$kimi_model"
-          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
-          ;;
-        deepseek)
-          export ANTHROPIC_BASE_URL="${PROVIDER_DEFAULTS[deepseek_base_url]}"
-          export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
-          ;;
-              esac
+      local model
+      model="$(get_config "${provider}_model")"
+      local url
+      url="$(get_config "${provider}_base_url")"
+
+      setup_provider_environment "$provider" "$api_key" "$model" "$url"
+
+      export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
       timeout "$PROVIDER_TEST_TIMEOUT" claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
       sleep 3

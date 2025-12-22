@@ -49,12 +49,12 @@ test_banner_function() {
     local banner_output
     banner_output=$(banner "Z.AI")
     assert_contains "$banner_output" "Z.AI" "banner() should display provider name 'Z.AI'"
-    assert_contains "$banner_output" "v1.12.0" "banner() should display version 'v1.12.0'"
+    assert_contains "$banner_output" "v1.12.4" "banner() should display version 'v1.12.4'"
 
     # Test with empty provider
     local empty_banner
     empty_banner=$(banner "")
-    assert_contains "$empty_banner" "v1.12.0" "banner() should display version even with empty provider"
+    assert_contains "$empty_banner" "v1.12.4" "banner() should display version even with empty provider"
 
     cleanup_test_environment "banner_test"
     end_test

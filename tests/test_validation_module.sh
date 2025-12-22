@@ -11,6 +11,9 @@ test_validation_module_functions() {
 
     setup_test_environment "validation_module_test"
 
+    # Source clauver script AFTER setting up test environment to get correct paths
+    source "$TEST_ROOT/../clauver.sh"
+
     # Test validation_api_key function
     # Test empty key
     validation_api_key "" "test" || local exit_code=$?
@@ -28,6 +31,15 @@ test_validation_module_functions() {
         local exit_code=$?
     fi
     assert_equals "$exit_code" "" "validation_api_key should accept valid key (no exit code)"
+
+    # Test key with 'rm' substring should pass (bug fix verification)
+    local key_with_rm="sk-format-123"
+    if validation_api_key "$key_with_rm" "test"; then
+        local exit_code=""
+    else
+        local exit_code=$?
+    fi
+    assert_equals "$exit_code" "" "validation_api_key should accept key containing 'rm' (no exit code)"
 
     # Test validation_url function
     # Test empty URL
@@ -67,18 +79,18 @@ test_validation_module_functions() {
     fi
     assert_equals "$exit_code" "" "validation_provider_name should accept valid kebab-case name (no exit code)"
 
-    # Test validation_model_name function
+    # Test validate_model_name function
     # Test empty model
-    validation_model_name "" || local exit_code=$?
-    assert_equals "$exit_code" "1" "validation_model_name should reject empty model with exit code 1"
+    validate_model_name "" || local exit_code=$?
+    assert_equals "$exit_code" "1" "validate_model_name should reject empty model with exit code 1"
 
     # Test valid model name should pass
-    if validation_model_name "gpt-4"; then
+    if validate_model_name "gpt-4"; then
         local exit_code=""
     else
         local exit_code=$?
     fi
-    assert_equals "$exit_code" "" "validation_model_name should accept valid model name (no exit code)"
+    assert_equals "$exit_code" "" "validate_model_name should accept valid model name (no exit code)"
 
     # Test validation_decrypted_content function
     # Test empty content
