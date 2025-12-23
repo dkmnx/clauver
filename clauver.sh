@@ -1080,6 +1080,7 @@ show_help() {
   echo "  test <provider>         Test a provider configuration"
   echo "  default [provider]      Set or show default provider"
   echo "  migrate                 Migrate plaintext secrets to encrypted storage"
+  echo "  reset [provider]        Factory reset or reset specific provider"
   echo
   echo "Switch Providers:"
   echo "  anthropic               Use Native Anthropic (no API key needed)"
@@ -1097,6 +1098,8 @@ show_help() {
   echo "  clauver anthropic       # Use Native Anthropic"
   echo "  clauver default zai     # Set Z.AI as default provider"
   echo "  clauver migrate         # Encrypt plaintext secrets"
+  echo "  clauver reset           # Factory reset (clears all config)"
+  echo "  clauver reset zai       # Reset only ZAI configuration"
   echo "  clauver version         # Check current version and updates"
   echo "  clauver update          # Update to latest version"
   echo "  clauver                 # Use default provider (after setting one)"
@@ -2060,6 +2063,158 @@ cmd_migrate() {
   fi
 }
 
+# =============================================================================
+# RESET MODULE: Factory reset and selective provider reset
+# =============================================================================
+
+cmd_reset() {
+  local provider=""
+  local force=""
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -f|--force)
+        force="$1"
+        shift
+        ;;
+      *)
+        provider="$1"
+        shift
+        ;;
+    esac
+  done
+
+  if [ -n "$provider" ]; then
+    cmd_reset_provider "$provider"
+  else
+    cmd_reset_all "$force"
+  fi
+}
+
+cmd_reset_all() {
+  local force="${1:-}"
+
+  echo -e "${BOLD}${RED}⚠️  Factory Reset${NC}"
+  echo "This will permanently delete:"
+  echo "  • Configuration: $(sanitize_path "$CONFIG")"
+  echo "  • Secrets: $(sanitize_path "$SECRETS")"
+  echo "  • Encrypted secrets: $(sanitize_path "$SECRETS_AGE")"
+  echo "  • Age key: $(sanitize_path "$AGE_KEY")"
+  echo
+
+  if [ "$force" != "--force" ] && [ "$force" != "-f" ]; then
+    read -r -p "Continue? [y/N] " confirm
+    if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+      ui_warn "Reset cancelled"
+      return 0
+    fi
+  fi
+
+  # Delete configuration files
+  rm -f "$CONFIG"
+  rm -f "$SECRETS"
+  rm -f "$SECRETS_AGE"
+  rm -f "$AGE_KEY"
+
+  ui_success "Factory reset complete"
+  echo "Run 'clauver setup' to reconfigure"
+}
+
+cmd_reset_provider() {
+  local provider="$1"
+
+  # Validate provider
+  case "$provider" in
+    anthropic)
+      ui_error "Cannot reset Native Anthropic - it's always available"
+      return 1
+      ;;
+    zai|minimax|kimi|deepseek)
+      # Valid built-in providers
+      ;;
+    *)
+      # Check if it's a custom provider
+      local api_key
+      api_key="$(get_config "custom_${provider}_api_key")"
+      if [ -z "$api_key" ]; then
+        ui_error "Unknown provider: $provider"
+        return 1
+      fi
+      ;;
+  esac
+
+  # Check if provider is configured
+  local is_configured=false
+  if [[ " zai minimax kimi deepseek " =~ " $provider " ]]; then
+    local key_name="${provider^^}_API_KEY"
+    local api_key
+    api_key="$(get_secret "$key_name")"
+    if [ -n "$api_key" ]; then
+      is_configured=true
+    fi
+  elif [ -n "$(get_config "custom_${provider}_api_key")" ]; then
+    is_configured=true
+  fi
+
+  if [ "$is_configured" = false ]; then
+    ui_warn "${provider} is not configured"
+    return 0
+  fi
+
+  # Confirmation
+  echo -e "${BOLD}Resetting ${provider}${NC}"
+  read -r -p "Remove all ${provider} configuration? [y/N] " confirm
+  if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    ui_warn "Reset cancelled"
+    return 0
+  fi
+
+  # Reset based on provider type
+  if [[ " zai minimax kimi deepseek " =~ " $provider " ]]; then
+    # Built-in provider
+    rm_secret "${provider^^}_API_KEY"
+    set_config "${provider}_model" ""
+    set_config "${provider}_base_url" ""
+  fi
+
+  # Handle custom provider deletion
+  if [ -n "$(get_config "custom_${provider}_api_key")" ]; then
+    set_config "custom_${provider}_api_key" ""
+    set_config "custom_${provider}_base_url" ""
+    set_config "custom_${provider}_model" ""
+  fi
+
+  ui_success "${provider} configuration removed"
+}
+
+rm_secret() {
+  local key="$1"
+
+  # For encrypted secrets, rewrite the file without this key
+  if [ -f "$SECRETS_AGE" ] && [ -f "$AGE_KEY" ]; then
+    local temp_file
+    temp_file=$(mktemp)
+
+    # Decrypt, filter out key, re-encrypt
+    age --decrypt -i "$AGE_KEY" "$SECRETS_AGE" 2>/dev/null | \
+      grep -v "^${key}=" > "$temp_file"
+
+    # Re-encrypt if not empty, otherwise remove
+    if [ -s "$temp_file" ]; then
+      age -p -o "$SECRETS_AGE" "$temp_file"
+    else
+      rm -f "$SECRETS_AGE"
+    fi
+    rm -f "$temp_file"
+  fi
+
+  # Also remove from plaintext if exists
+  if [ -f "$SECRETS" ]; then
+    sed -i "/^${key}=/d" "$SECRETS"
+  fi
+}
+
 cmd_setup() {
   echo -e "${BOLD}${BLUE}"
   cat <<'EOF'
@@ -2184,6 +2339,10 @@ case "${1:-}" in
     ;;
   migrate)
     cmd_migrate
+    ;;
+  reset)
+    shift
+    cmd_reset "$@"
     ;;
   anthropic)
     shift
