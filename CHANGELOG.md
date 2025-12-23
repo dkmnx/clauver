@@ -5,6 +5,14 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.12.5] - 2025-12-23
+
+### Changed
+
+- Provider models - Updated default models for improved compatibility:
+  - Z.AI: `glm-4.6` → `glm-4.7` (retained `glm-4.5-air` for haiku model)
+  - MiniMax: `MiniMax-M2` → `Minimax-M2.1`
+
 ## [1.12.4] - 2025-12-21
 
 ### Improved
