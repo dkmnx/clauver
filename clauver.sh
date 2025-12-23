@@ -26,9 +26,9 @@ declare -A CONFIG_CACHE=()  # Used dynamically for config caching
 # Configuration constants - extracted from hardcoded values
 declare -A PROVIDER_DEFAULTS=(
   ["zai_base_url"]="https://api.z.ai/api/anthropic"
-  ["zai_default_model"]="glm-4.6"
+  ["zai_default_model"]="glm-4.7"
   ["minimax_base_url"]="https://api.minimax.io/anthropic"
-  ["minimax_default_model"]="MiniMax-M2"
+  ["minimax_default_model"]="Minimax-M2.1"
   ["kimi_base_url"]="https://api.kimi.com/coding/"
   ["kimi_default_model"]="kimi-for-coding"
   ["deepseek_base_url"]="https://api.deepseek.com/anthropic"
@@ -37,7 +37,7 @@ declare -A PROVIDER_DEFAULTS=(
 
 declare -A PROVIDER_METADATA=(
   ["zai"]="Z.AI|zai_base_url|ZAI_API_KEY|zai_model|zai_default_model|glm-4.5-air"
-  ["minimax"]="MiniMax|minimax_base_url|MINIMAX_API_KEY|minimax_model|minimax_default_model|MiniMax-M2"
+  ["minimax"]="MiniMax|minimax_base_url|MINIMAX_API_KEY|minimax_model|minimax_default_model|Minimax-M2.1"
   ["kimi"]="Moonshot AI|kimi_base_url|KIMI_API_KEY|kimi_model|kimi_default_model|kimi-for-coding"
   ["deepseek"]="DeepSeek AI|deepseek_base_url|DEEPSEEK_API_KEY|deepseek_model|deepseek_default_model|deepseek-chat"
 )
