@@ -62,7 +62,7 @@ EOF
     # Step 9: Check version
     local version_output
     version_output=$(cmd_version)
-    assert_contains "$version_output" "v1.12.5" "Version should be displayed"
+    assert_contains "$version_output" "v1.13.0" "Version should be displayed"
 
     cleanup_test_environment "full_workflow_test"
     end_test

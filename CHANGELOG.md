@@ -5,6 +5,15 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.0] - 2025-12-23
+
+### Added
+
+- Reset command for factory reset and selective provider reset:
+  - `clauver reset` - Factory reset (clears all configuration, secrets, and age key)
+  - `clauver reset <provider>` - Reset specific provider configuration only
+  - `clauver reset --force` - Skip confirmation prompt
+
 ## [1.12.5] - 2025-12-23
 
 ### Changed
@@ -490,6 +499,7 @@ properly configured, resulting in cleaner output and improved user experience
 - Configuration testing and status monitoring
 - Quick setup wizard for beginners
 
+[1.13.0]: https://github.com/dkmnx/clauver/compare/v1.12.5...v1.13.0
 [1.12.4]: https://github.com/dkmnx/clauver/compare/v1.12.3...v1.12.4
 [1.12.3]: https://github.com/dkmnx/clauver/compare/v1.12.2...v1.12.3
 [1.12.2]: https://github.com/dkmnx/clauver/compare/v1.12.1...v1.12.2
