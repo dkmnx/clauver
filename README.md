@@ -11,7 +11,7 @@
 
 [![CI](https://github.com/dkmnx/clauver/workflows/CI%20Test%20Suite/badge.svg)](https://github.com/dkmnx/clauver/actions)
 [![Shellcheck](https://img.shields.io/badge/shellcheck-passing-brightgreen)](https://github.com/koalaman/shellcheck)
-[![Version](https://img.shields.io/badge/version-1.13.0-blue)](https://github.com/dkmnx/clauver/tree/v1.13.0)
+[![Version](https://img.shields.io/badge/version-1.13.1-blue)](https://github.com/dkmnx/clauver/tree/v1.13.1)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **Claude Code Provider Manager** - Switch between multiple Claude Code API

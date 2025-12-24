@@ -5,6 +5,38 @@ All notable changes to Clauver will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.13.1] - 2025-12-24
+
+### Added
+
+- Comprehensive inline documentation for configuration constants - Added detailed comments explaining provider
+  defaults, metadata, environment variables, and performance configuration constants to improve code maintainability
+
+### Refactored
+
+- Background process tracking - Improved cleanup mechanism with CLAUVER_BG_PIDS array for explicit PID tracking:
+  - Added track_background_pid function for centralized PID tracking
+  - Implemented SIGTERM signal for graceful shutdown before SIGKILL
+  - Added wait command to ensure proper process termination
+  - Improved PID validation and removed unnecessary upper bound check
+  - Track test PIDs in cmd_test function for better cleanup
+- Installation detection - Simplified install.sh method detection by removing temp file approach
+- Provider matching - Simplified regex pattern matching in cmd_reset_provider for built-in providers
+- API key validation - Removed strict format checks, length requirements, and character restrictions for increased
+  flexibility across different provider key formats
+- Logging functions - Removed duplicate standalone log, success, warn, and error functions in favor of prefixed
+  UI module versions (ui_log, ui_success, ui_warn, ui_error)
+- Setup command - Removed ASCII art banner for cleaner output
+
+### Changed
+
+- Test API key patterns - Normalized test API key patterns across all test suites for consistency
+- Removed unused MIN_API_KEY_LENGTH validation constant
+
+### Removed
+
+- Redundant logging functions - Dropped standalone logging functions, now using prefixed UI module versions exclusively
+
 ## [1.13.0] - 2025-12-23
 
 ### Added
@@ -499,6 +531,7 @@ properly configured, resulting in cleaner output and improved user experience
 - Configuration testing and status monitoring
 - Quick setup wizard for beginners
 
+[1.13.1]: https://github.com/dkmnx/clauver/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/dkmnx/clauver/compare/v1.12.5...v1.13.0
 [1.12.4]: https://github.com/dkmnx/clauver/compare/v1.12.3...v1.12.4
 [1.12.3]: https://github.com/dkmnx/clauver/compare/v1.12.2...v1.12.3
