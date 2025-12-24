@@ -6,35 +6,38 @@
 # Source the test framework first
 source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 
+# Source the main clauver script to get UI functions
+source "$(dirname "${BASH_SOURCE[0]}")/../clauver.sh"
+
 # Test suite for utility functions
 test_logging_functions() {
     start_test "test_logging_functions" "Test logging utility functions"
 
-    # Test log function
+    # Test ui_log function
     setup_test_environment "logging_test"
 
     # Capture output
-    local log_output
-    log_output=$(log "Test message")
-    assert_contains "$log_output" "Test message" "log() function should output the test message"
+    local ui_log_output
+    ui_log_output=$(ui_log "Test message")
+    assert_contains "$ui_log_output" "Test message" "ui_log() function should output the test message"
 
-    # Test success function
-    local success_output
-    success_output=$(success "Success message")
-    assert_contains "$success_output" "✓" "success() function should output checkmark symbol"
-    assert_contains "$success_output" "Success message" "success() function should output the success message"
+    # Test ui_success function
+    local ui_success_output
+    ui_success_output=$(ui_success "Success message")
+    assert_contains "$ui_success_output" "✓" "ui_success() function should output checkmark symbol"
+    assert_contains "$ui_success_output" "Success message" "ui_success() function should output the success message"
 
-    # Test warn function
-    local warn_output
-    warn_output=$(warn "Warning message")
-    assert_contains "$warn_output" "!" "warn() function should output exclamation mark"
-    assert_contains "$warn_output" "Warning message" "warn() function should output the warning message"
+    # Test ui_warn function
+    local ui_warn_output
+    ui_warn_output=$(ui_warn "Warning message")
+    assert_contains "$ui_warn_output" "!" "ui_warn() function should output exclamation mark"
+    assert_contains "$ui_warn_output" "Warning message" "ui_warn() function should output the warning message"
 
-    # Test error function
-    local error_output
-    error_output=$(error "Error message" 2>&1)
-    assert_contains "$error_output" "✗" "error() function should output X mark symbol"
-    assert_contains "$error_output" "Error message" "error() function should output the error message"
+    # Test ui_error function
+    local ui_error_output
+    ui_error_output=$(ui_error "Error message" 2>&1)
+    assert_contains "$ui_error_output" "✗" "ui_error() function should output X mark symbol"
+    assert_contains "$ui_error_output" "Error message" "ui_error() function should output the error message"
 
     cleanup_test_environment "logging_test"
     end_test
@@ -279,7 +282,7 @@ test_provider_defaults() {
 
     local zai_default_model
     zai_default_model="${PROVIDER_DEFAULTS[zai_default_model]}"
-    assert_equals "$zai_default_model" "glm-4.6" "Z.AI default model should be correct"
+    assert_equals "$zai_default_model" "glm-4.7" "Z.AI default model should be correct"
 
     # Test MiniMax defaults
     local minimax_base_url
@@ -288,7 +291,7 @@ test_provider_defaults() {
 
     local minimax_default_model
     minimax_default_model="${PROVIDER_DEFAULTS[minimax_default_model]}"
-    assert_equals "$minimax_default_model" "MiniMax-M2" "MiniMax default model should be correct"
+    assert_equals "$minimax_default_model" "Minimax-M2.1" "MiniMax default model should be correct"
 
     # Test Kimi defaults
     local kimi_base_url

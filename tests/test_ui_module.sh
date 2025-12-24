@@ -5,6 +5,9 @@
 # Source the test framework first
 source "$(dirname "${BASH_SOURCE[0]}")/test_framework.sh"
 
+# Source the main clauver script to get UI functions
+source "$(dirname "${BASH_SOURCE[0]}")/../clauver.sh"
+
 # Test suite for UI module functions (prefixed versions)
 test_ui_module_functions() {
     start_test "test_ui_module_functions" "Test UI module functions with consistent prefixes"
@@ -39,7 +42,7 @@ test_ui_module_functions() {
     local ui_banner_output
     ui_banner_output=$(ui_banner "Z.AI")
     assert_contains "$ui_banner_output" "Z.AI" "ui_banner() should display provider name 'Z.AI'"
-    assert_contains "$ui_banner_output" "v1.12.0" "ui_banner() should display version 'v1.12.0'"
+    assert_contains "$ui_banner_output" "v${VERSION}" "ui_banner() should display version"
 
     cleanup_test_environment "ui_module_test"
     end_test

@@ -79,10 +79,6 @@ BLUE=$'\033[0;34m'
 BOLD=$'\033[1m'
 NC=$'\033[0m'
 
-log() { printf "${BLUE}→${NC} %s\n" "$*"; }
-success() { printf "${GREEN}✓${NC} %s\n" "$*"; }
-warn() { printf "${YELLOW}!${NC} %s\n" "$*"; }
-
 # Sanitize paths in error messages to prevent information disclosure
 sanitize_path() {
   local path="$1"
@@ -95,7 +91,6 @@ sanitize_path() {
     echo "$path"
   fi
 }
-error() { printf "${RED}✗${NC} %s\n" "$*" >&2; }
 
 # =============================================================================
 # UI MODULE: User interface and display functions with consistent prefixes
