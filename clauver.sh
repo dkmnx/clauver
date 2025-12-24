@@ -22,8 +22,8 @@ SECRETS_LOADED=0
 CONFIG_CACHE_LOADED=0
 # shellcheck disable=SC2034
 declare -A CONFIG_CACHE=()  # Used dynamically for config caching
-
 # Configuration constants - extracted from hardcoded values
+# PROVIDER_DEFAULTS: Base URLs and default models for each API provider
 declare -A PROVIDER_DEFAULTS=(
   ["zai_base_url"]="https://api.z.ai/api/anthropic"
   ["zai_default_model"]="glm-4.7"
@@ -35,6 +35,7 @@ declare -A PROVIDER_DEFAULTS=(
   ["deepseek_default_model"]="deepseek-chat"
 )
 
+# PROVIDER_METADATA: Provider display name|config_key|env_var|model_key|default_model_key|fallback_model
 declare -A PROVIDER_METADATA=(
   ["zai"]="Z.AI|zai_base_url|ZAI_API_KEY|zai_model|zai_default_model|glm-4.5-air"
   ["minimax"]="MiniMax|minimax_base_url|MINIMAX_API_KEY|minimax_model|minimax_default_model|Minimax-M2.1"
@@ -42,6 +43,8 @@ declare -A PROVIDER_METADATA=(
   ["deepseek"]="DeepSeek AI|deepseek_base_url|DEEPSEEK_API_KEY|deepseek_model|deepseek_default_model|deepseek-chat"
 )
 
+# PROVIDER_ENV_VARS: Environment variables to set when switching to each provider
+# Format: VAR1=key1,VAR2=key2,...
 declare -A PROVIDER_ENV_VARS=(
   ["zai"]="ANTHROPIC_DEFAULT_HAIKU_MODEL=glm-4.5-air"
   ["minimax"]="ANTHROPIC_SMALL_FAST_MODEL_TIMEOUT=minimax_small_fast_timeout,ANTHROPIC_SMALL_FAST_MAX_TOKENS=minimax_small_fast_max_tokens"
@@ -51,6 +54,15 @@ declare -A PROVIDER_ENV_VARS=(
 
 
 # Timeout and token limits
+# These values are tuned based on provider API characteristics:
+# - network_connect_timeout: 10s - reasonable for initial connection
+# - network_max_time: 30s - max time for API response
+# - minimax_small_fast_timeout: 120s - MiniMax M2 model response time
+# - minimax_small_fast_max_tokens: 24576 - MiniMax token limit
+# - kimi_small_fast_timeout: 240s - Kimi model has longer response time
+# - kimi_small_fast_max_tokens: 200000 - Kimi higher token limit
+# - deepseek_api_timeout_ms: 600000 (10min) - DeepSeek allows longer queries
+# - test_api_timeout_ms: 3000000 (50min) - Extended timeout for test API calls
 declare -A PERFORMANCE_DEFAULTS=(
   ["network_connect_timeout"]="10"
   ["network_max_time"]="30"
@@ -63,6 +75,10 @@ declare -A PERFORMANCE_DEFAULTS=(
 )
 
 # Validation constants
+# MIN_API_KEY_LENGTH=10 - Minimum length to filter out accidental empty/short inputs
+# ANTHROPIC_TEST_TIMEOUT=5s - Quick test for Anthropic CLI availability
+# PROVIDER_TEST_TIMEOUT=10s - Provider API connectivity test duration
+# DOWNLOAD_TIMEOUT=60s - Update/download operation timeout
 MIN_API_KEY_LENGTH=10
 ANTHROPIC_TEST_TIMEOUT=5
 PROVIDER_TEST_TIMEOUT=10
