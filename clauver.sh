@@ -386,6 +386,15 @@ crypto_decrypt_file() {
   age --decrypt -i "$AGE_KEY" < "$input" > "$output"
 }
 
+# Track background PIDs for proper cleanup
+declare -a CLAUVER_BG_PIDS=()
+
+# Add a background PID to tracking list
+track_background_pid() {
+  local pid="$1"
+  [ -n "$pid" ] && CLAUVER_BG_PIDS+=("$pid")
+}
+
 # Progress indicator for long-running operations
 show_progress() {
   local message="$1"
@@ -394,6 +403,7 @@ show_progress() {
   local spinner="${4:-⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏}"
 
   printf "${BLUE}${spinner:0:1}${NC} %s..." "$message"
+  track_background_pid "$pid"
 
   while kill -0 "$pid" 2>/dev/null; do
     for ((i=1; i<${#spinner}; i++)); do
@@ -423,19 +433,31 @@ BANNER
   printf "%b" "${NC}"
 }
 
-# Background process cleanup
+# Background process cleanup - improved PID tracking
 cleanup_background_processes() {
+  # Clean up tracked background PIDs first
+  for pid in "${CLAUVER_BG_PIDS[@]:-}"; do
+    if [ -n "$pid" ] && [[ "$pid" =~ ^[0-9]+$ ]]; then
+      # Verify process exists and is still running
+      if kill -0 "$pid" 2>/dev/null; then
+        # Send SIGTERM first for graceful shutdown
+        kill -TERM "$pid" 2>/dev/null || true
+      fi
+    fi
+  done
+
+  # Wait for all child processes to finish
+  wait 2>/dev/null || true
+
+  # Fallback: clean up any remaining background jobs using jobs command
   local jobs_list
   local job_pid
-
-  # Get list of background job PIDs safely
   jobs_list=$(jobs -p 2>/dev/null)
 
   if [ -n "$jobs_list" ]; then
-    # Process each PID individually to prevent injection
     while IFS= read -r job_pid; do
       # Validate PID is numeric and reasonable
-      if [[ "$job_pid" =~ ^[0-9]+$ ]] && [ "$job_pid" -gt 1 ] && [ "$job_pid" -lt 32768 ]; then
+      if [[ "$job_pid" =~ ^[0-9]+$ ]] && [ "$job_pid" -gt 1 ]; then
         # Verify it's actually a background job we own
         if kill -0 "$job_pid" 2>/dev/null; then
           kill "$job_pid" 2>/dev/null || true
@@ -1725,6 +1747,7 @@ cmd_test() {
       export API_TIMEOUT_MS="${PERFORMANCE_DEFAULTS[test_api_timeout_ms]}"
       timeout "$PROVIDER_TEST_TIMEOUT" claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
+      track_background_pid "$test_pid"
       sleep 3
       if kill -0 $test_pid 2>/dev/null; then
         ui_success "${provider^^} configuration is valid"
@@ -1747,6 +1770,7 @@ cmd_test() {
       export ANTHROPIC_AUTH_TOKEN="$api_key"
       timeout "$PROVIDER_TEST_TIMEOUT" claude "test" --dangerously-skip-permissions &>/dev/null &
       local test_pid=$!
+      track_background_pid "$test_pid"
       sleep 3
       if kill -0 $test_pid 2>/dev/null; then
         ui_success "$provider configuration is valid"
