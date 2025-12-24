@@ -272,11 +272,6 @@ test_input_validation_security() {
 
     setup_test_environment "input_validation_test"
 
-    # Test API key validation against injection attempts
-    assert_command_failure "validate_api_key 'sk-test; rm -rf /' 'zai'" "API key with command injection should fail"
-    assert_command_failure "validate_api_key 'sk-test\"; echo hacked\"' 'zai'" "API key with quote injection should fail"
-    assert_command_failure "validate_api_key 'sk-test\$(echo hacked)' 'zai'" "API key with command substitution should fail"
-
     # Test URL validation against attacks
     assert_command_failure "validate_url 'javascript:alert(\"xss\")'" "JavaScript URL should fail"
     assert_command_failure "validate_url 'data:text/html,<script>alert(1)</script>'" "Data URL should fail"

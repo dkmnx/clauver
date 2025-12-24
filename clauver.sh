@@ -116,57 +116,6 @@ BANNER
 }
 
 # =============================================================================
-# VALIDATION MODULE: Input validation functions with consistent prefixes
-# =============================================================================
-
-validation_api_key() {
-  local key="$1"
-  local provider="$2"
-
-  # Basic validation - non-empty and reasonable length
-  if [ -z "$key" ]; then
-    ui_error "API key cannot be empty"
-    return 1
-  fi
-
-  # Check minimum length (most API keys are at least 20 chars)
-  if [ ${#key} -lt "$MIN_API_KEY_LENGTH" ]; then
-    ui_error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
-    return 1
-  fi
-
-  # Enhanced security validation - prevent ALL shell metacharacters
-  # Allow only alphanumeric, dot, underscore, hyphen, and common API key chars
-  if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    ui_error "API key contains invalid characters"
-    return 1
-  fi
-
-  # Provider-specific validation
-  case "$provider" in
-    "zai")
-      if [[ ! "$key" =~ ^sk-test-[a-zA-Z0-9]+$ ]]; then
-        ui_error "Z.AI API key must start with 'sk-test-' and contain only alphanumeric characters"
-        return 1
-      fi
-      ;;
-    "minimax")
-      if [[ ! "$key" =~ ^[a-zA-Z0-9]+$ ]]; then
-        ui_error "MiniMax API key must contain only alphanumeric characters"
-        return 1
-      fi
-      ;;
-    "kimi")
-      if [[ ! "$key" =~ ^[a-zA-Z0-9-]+$ ]]; then
-        ui_error "Kimi API key must contain only alphanumeric characters and hyphens"
-        return 1
-      fi
-      ;;
-  esac
-
-  return 0
-}
-
 validation_url() {
   local url="$1"
 
@@ -1222,10 +1171,6 @@ config_standard_provider() {
   read -rs -p "API Key: " key; echo
   [ -z "$key" ] && { ui_error "Key is required"; return 1; }
 
-  # Validate API key
-  if ! validate_api_key "$key" "$provider"; then
-    return 1
-  fi
 
   set_secret "$key_name" "$key"
 
@@ -1352,10 +1297,6 @@ config_custom_provider() {
 
   # Validate inputs
   if ! validate_url "$base_url"; then
-    return 1
-  fi
-
-  if ! validate_api_key "$api_key" "custom"; then
     return 1
   fi
 
@@ -1493,51 +1434,6 @@ switch_to_provider() {
   setup_provider_environment "$provider" "$api_key" "$model" "$url"
 
   exec claude "$@"
-}
-
-# Input validation framework
-validate_api_key() {
-  local key="$1"
-  local provider="$2"
-
-  # Basic validation - non-empty and reasonable length
-  if [ -z "$key" ]; then
-    ui_error "API key cannot be empty"
-    return 1
-  fi
-
-  # Check minimum length (most API keys are at least 20 chars)
-  if [ ${#key} -lt "$MIN_API_KEY_LENGTH" ]; then
-    ui_error "API key too short (minimum $MIN_API_KEY_LENGTH characters)"
-    return 1
-  fi
-
-  # Enhanced security validation - prevent ALL shell metacharacters
-  # Allow only alphanumeric, dot, underscore, hyphen, and common API key chars
-  if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-    ui_error "API key contains invalid characters"
-    return 1
-  fi
-
-  # Provider-specific validation
-  case "$provider" in
-    "zai"|"minimax"|"kimi"|"deepseek")
-      # Most API keys start with sk- or similar prefixes
-      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        ui_error "API key contains invalid characters for $provider"
-        return 1
-      fi
-      ;;
-    "custom")
-      # Custom providers may have different key formats
-      if [[ ! "$key" =~ ^[a-zA-Z0-9._-]+$ ]]; then
-        ui_error "API key contains invalid characters"
-        return 1
-      fi
-      ;;
-  esac
-
-  return 0
 }
 
 validate_url() {

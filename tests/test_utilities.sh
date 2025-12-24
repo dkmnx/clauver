@@ -176,21 +176,6 @@ test_validation_functions() {
     # Source clauver script after setting up test environment to get correct paths
     source "$TEST_ROOT/../clauver.sh"
 
-    # Test API key validation
-    # Valid keys
-    assert_command_success "validate_api_key 'sk-test-1234567890' 'zai'" "Z.AI API key validation should accept valid key starting with 'sk-test-'"
-    assert_command_success "validate_api_key 'abc123def456' 'minimax'" "MiniMax API key validation should accept valid alphanumeric key"
-    assert_command_success "validate_api_key 'test-key-123' 'kimi'" "Kimi API key validation should accept valid key with hyphens"
-
-    # Invalid keys - empty
-    assert_command_failure "validate_api_key '' 'zai'" "Z.AI API key validation should reject empty key as invalid format"
-    assert_command_failure "validate_api_key '' 'minimax'" "MiniMax API key validation should reject empty key as too short"
-    assert_command_failure "validate_api_key '' 'kimi'" "Kimi API key validation should reject empty key as missing input"
-
-    # Invalid keys - too short
-    assert_command_failure "validate_api_key 'short' 'zai'" "Z.AI API key validation should reject short key as below minimum length"
-    assert_command_failure "validate_api_key 'a' 'minimax'" "MiniMax API key validation should reject single character key as insufficient"
-
     # Test URL validation
     # Valid URLs
     assert_command_success "validate_url 'https://api.example.com'" "HTTPS URL validation should accept secure API endpoint"

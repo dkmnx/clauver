@@ -19,12 +19,6 @@ test_command_injection_in_api_key() {
     # Source clauver script after setting up test environment to get correct paths
     source "$TEST_ROOT/../clauver.sh"
 
-    # Test malicious API key with command injection
-    assert_command_failure "validate_api_key 'sk-123456; rm -rf /tmp/clauver_test_' 'zai'" "Command injection with semicolon should be rejected"
-
-    # Test API key with backticks
-    assert_command_failure "validate_api_key 'sk-123456\`whoami\`' 'zai'" "Command injection with backticks should be rejected"
-
     end_test
 }
 
