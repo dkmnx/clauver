@@ -37,21 +37,21 @@ test_provider_switching_basic() {
     assert_command_success "switch_to_anthropic --version" "Switch to anthropic should succeed"
 
     # Test switch_to_zai function
-    export ZAI_API_KEY="sk-test-zai-key-123"
+    export ZAI_API_KEY="test-api-key-xxxx"
     assert_command_success "switch_to_zai --version" "Switch to Z.AI should succeed with API key"
 
     # Test switch_to_minimax function
-    export MINIMAX_API_KEY="sk-test-minimax-key-456"
+    export MINIMAX_API_KEY="test-api-key-xxxx"
     assert_command_success "switch_to_minimax --version" "Switch to MiniMax should succeed with API key"
 
     # Test switch_to_kimi function
-    export KIMI_API_KEY="sk-test-kimi-key-789"
+    export KIMI_API_KEY="test-api-key-xxxx"
     set_config "kimi_model" "kimi-for-coding"
     set_config "kimi_base_url" "https://api.kimi.com/coding/"
     assert_command_success "switch_to_kimi --version" "Switch to Kimi should succeed with API key and config"
 
     # Test switch_to_deepseek function
-    export DEEPSEEK_API_KEY="sk-test-deepseek-key-999"
+    export DEEPSEEK_API_KEY="test-api-key-xxxx"
     assert_command_success "switch_to_deepseek --version" "Switch to DeepSeek should succeed with API key"
 
     cleanup_test_environment "provider_switching_test"
@@ -64,26 +64,26 @@ test_provider_configuration() {
     setup_test_environment "provider_config_test"
 
     # Test Z.AI configuration
-    export ZAI_API_KEY="sk-test-zai-config"
+    export ZAI_API_KEY="test-key-xxxxconfig"
 
     # Mock key input for ZAI config
-    echo "sk-test-zai-config" | cmd_config "zai"
+    echo "test-key-xxxxconfig" | cmd_config "zai"
 
     # Verify Z.AI key is stored
     local zai_key
     zai_key=$(get_secret "ZAI_API_KEY")
-    assert_equals "$zai_key" "sk-test-zai-config" "Z.AI API key should be stored"
+    assert_equals "$zai_key" "test-key-xxxxconfig" "Z.AI API key should be stored"
 
     # Test MiniMax configuration
-    echo "sk-test-minimax-config" | cmd_config "minimax"
+    echo "test-key-xxxxconfig" | cmd_config "minimax"
 
     local minimax_key
     minimax_key=$(get_secret "MINIMAX_API_KEY")
-    assert_equals "$minimax_key" "sk-test-minimax-config" "MiniMax API key should be stored"
+    assert_equals "$minimax_key" "test-key-xxxxconfig" "MiniMax API key should be stored"
 
     # Test Kimi configuration with custom model
     cat > "$TEST_TEMP_DIR/kimi_input.txt" <<EOF
-sk-test-kimi-config
+test-key-xxxxconfig
 kimi-custom-model
 https://custom.kimi.com/api/
 EOF
@@ -93,7 +93,7 @@ EOF
 
     local kimi_key
     kimi_key=$(get_secret "KIMI_API_KEY")
-    assert_equals "$kimi_key" "sk-test-kimi-config" "Kimi API key should be stored"
+    assert_equals "$kimi_key" "test-key-xxxxconfig" "Kimi API key should be stored"
 
     local kimi_model
     kimi_model=$(get_config "kimi_model")
@@ -104,11 +104,11 @@ EOF
     assert_equals "$kimi_url" "https://custom.kimi.com/api/" "Kimi URL should be stored"
 
     # Test DeepSeek configuration
-    echo "sk-test-deepseek-config" | cmd_config "deepseek"
+    echo "test-key-xxxxconfig" | cmd_config "deepseek"
 
     local deepseek_key
     deepseek_key=$(get_secret "DEEPSEEK_API_KEY")
-    assert_equals "$deepseek_key" "sk-test-deepseek-config" "DeepSeek API key should be stored"
+    assert_equals "$deepseek_key" "test-key-xxxxconfig" "DeepSeek API key should be stored"
 
     cleanup_test_environment "provider_config_test"
     end_test
@@ -269,28 +269,28 @@ EOF
     export PATH="$TEST_TEMP_DIR:$PATH"
 
     # Test Z.AI provider test
-    export ZAI_API_KEY="sk-test-zai-key"
+    export ZAI_API_KEY="test-key-xxxxkey"
     cmd_test "zai"
 
     # Test MiniMax provider test
-    export MINIMAX_API_KEY="sk-test-minimax-key"
+    export MINIMAX_API_KEY="test-key-xxxxkey"
     cmd_test "minimax"
 
     # Test Kimi provider test
-    export KIMI_API_KEY="sk-test-kimi-key"
+    export KIMI_API_KEY="test-key-xxxxkey"
     set_config "kimi_model" "kimi-test-model"
     set_config "kimi_base_url" "https://api.test.kimi.com/"
     cmd_test "kimi"
 
     # Test DeepSeek provider test
-    export DEEPSEEK_API_KEY="sk-test-deepseek-key"
+    export DEEPSEEK_API_KEY="test-key-xxxxkey"
     cmd_test "deepseek"
 
     # Test Native Anthropic provider test
     cmd_test "anthropic"
 
     # Test custom provider test
-    set_config "custom_testcustom_api_key" "sk-test-custom-key"
+    set_config "custom_testcustom_api_key" "test-key-xxxxkey"
     set_config "custom_testcustom_base_url" "https://custom.test.api.com/"
     cmd_test "testcustom"
 
@@ -444,7 +444,7 @@ EOF
     export PATH="$TEST_TEMP_DIR:$PATH"
     
     
-    setup_provider_environment "zai" "sk-test-key" "test-model" "https://test.com" > "$TEST_TEMP_DIR/setup_output.log" 2>&1
+    setup_provider_environment "zai" "test-key" "test-model" "https://test.com" > "$TEST_TEMP_DIR/setup_output.log" 2>&1
     
     
     export CUSTOM_VAR=""
@@ -470,7 +470,7 @@ test_provider_error_scenarios() {
 
     # Test configuration with invalid URLs
     cat > "$TEST_TEMP_DIR/invalid_input.txt" <<EOF
-sk-test-key
+test-key
 invalid-url-not-a-url
 EOF
 
@@ -478,9 +478,9 @@ EOF
 
     # Test configuration with reserved names
     cat > "$TEST_TEMP_DIR/reserved_input.txt" <<EOF
-sk-test-key
+test-key
 http://valid-url.com
-sk-test-key
+test-key
 EOF
 
     # Should fail for reserved name

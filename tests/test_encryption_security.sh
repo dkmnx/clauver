@@ -21,10 +21,10 @@ test_age_encryption_basic() {
     ensure_age_key
 
     # Create test secrets
-    export ZAI_API_KEY="sk-test-zai-key-123456789"
-    export MINIMAX_API_KEY="sk-test-minimax-key-987654321"
-    export KIMI_API_KEY="sk-test-kimi-key-abcdef123"
-    export DEEPSEEK_API_KEY="sk-test-deepseek-key-xyz789xyz"
+    export ZAI_API_KEY="test-api-key-xxxx"
+    export MINIMAX_API_KEY="test-api-key-xxxx"
+    export KIMI_API_KEY="test-api-key-xxxxabcdef123"
+    export DEEPSEEK_API_KEY="test-api-key-xxxxxyz789xyz"
 
     # Test save_secrets function
     assert_command_success "save_secrets" "Save secrets should succeed"
@@ -56,8 +56,8 @@ test_age_decryption() {
     source "$TEST_ROOT/../clauver.sh"
 
     # Set up test secrets
-    export ZAI_API_KEY="sk-test-zai-decrypt-123"
-    export MINIMAX_API_KEY="sk-test-minimax-decrypt-456"
+    export ZAI_API_KEY="test-key-xxxx"
+    export MINIMAX_API_KEY="test-key-xxxx"
 
     # Save encrypted secrets
     save_secrets
@@ -72,11 +72,11 @@ test_age_decryption() {
     # Verify decrypted secrets are available
     local decrypted_zai_key
     decrypted_zai_key=$(get_secret "ZAI_API_KEY")
-    assert_equals "$decrypted_zai_key" "sk-test-zai-decrypt-123" "Decrypted Z.AI key should be available"
+    assert_equals "$decrypted_zai_key" "test-key-xxxx" "Decrypted Z.AI key should be available"
 
     local decrypted_minimax_key
     decrypted_minimax_key=$(get_secret "MINIMAX_API_KEY")
-    assert_equals "$decrypted_minimax_key" "sk-test-minimax-decrypt-456" "Decrypted MiniMax key should be available"
+    assert_equals "$decrypted_minimax_key" "test-key-xxxx" "Decrypted MiniMax key should be available"
 
     # Clean up environment variables to prevent test contamination
     unset ZAI_API_KEY MINIMAX_API_KEY KIMI_API_KEY DEEPSEEK_API_KEY
@@ -425,12 +425,12 @@ test_decrypted_content_validation() {
     source "$TEST_ROOT/../clauver.sh"
 
     # Test valid single line environment variable
-    assert_command_success "validate_decrypted_content 'ZAI_API_KEY=sk-test1234567890abcdef'" "Valid single line content should pass"
+    assert_command_success "validate_decrypted_content 'ZAI_API_KEY=testkeyabcdef'" "Valid single line content should pass"
 
     # Test valid multi-line environment variables
-    local multiline_content="ZAI_API_KEY=sk-test-zai-key-123
-MINIMAX_API_KEY=sk-test-minimax-key-456
-KIMI_API_KEY=sk-test-kimi-key-789"
+    local multiline_content="ZAI_API_KEY=test-api-key-xxxx
+MINIMAX_API_KEY=test-api-key-xxxx
+KIMI_API_KEY=test-api-key-xxxx"
     assert_command_success "validate_decrypted_content '$multiline_content'" "Valid multi-line content should pass"
 
     # Test content with spaces and tabs (allowed)
@@ -530,8 +530,8 @@ test_load_secrets_malicious_content() {
 
     # Test 5: Valid content should work (but we need to simulate proper age decryption)
     # For this test, we'll use the real save/load functionality
-    export ZAI_API_KEY="sk-test-valid-key-123456789"
-    export MINIMAX_API_KEY="sk-test-valid-key-987654321"
+    export ZAI_API_KEY="test-api-key-xxxx"
+    export MINIMAX_API_KEY="test-api-key-xxxx"
 
     # Save real encrypted secrets
     assert_command_success "save_secrets" "Saving valid secrets should succeed"
@@ -545,7 +545,7 @@ test_load_secrets_malicious_content() {
     # Verify secrets were loaded
     local loaded_zai
     loaded_zai=$(get_secret "ZAI_API_KEY")
-    assert_equals "$loaded_zai" "sk-test-valid-key-123456789" "Valid ZAI key should be loaded"
+    assert_equals "$loaded_zai" "test-api-key-xxxx" "Valid ZAI key should be loaded"
 
     # Clean up
     rm -f "$temp_decrypt"

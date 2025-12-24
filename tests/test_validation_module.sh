@@ -24,7 +24,7 @@ test_validation_module_functions() {
     assert_equals "$exit_code" "1" "validation_api_key should reject short key with exit code 1"
 
     # Test valid key should pass (not return error code)
-    local valid_key="sk-test-1234567890abcdef"
+    local valid_key="test-key1234567890abcdef"
     if validation_api_key "$valid_key" "test"; then
         local exit_code=""
     else
@@ -98,7 +98,7 @@ test_validation_module_functions() {
     assert_equals "$exit_code" "1" "validation_decrypted_content should reject empty content with exit code 1"
 
     # Test valid content should pass
-    if validation_decrypted_content "API_KEY=sk-test-123"; then
+    if validation_decrypted_content "API_KEY=test-key123"; then
         local exit_code=""
     else
         local exit_code=$?

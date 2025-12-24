@@ -30,13 +30,13 @@ EOF
     echo "1" | cmd_setup 2>/dev/null || true
 
     # Step 2: Configure Z.AI provider
-    echo "sk-test-zai-integration-key" | cmd_config "zai" 2>/dev/null || true
+    echo "test-key-xxxxkey" | cmd_config "zai" 2>/dev/null || true
 
     # Step 3: Configure MiniMax provider
-    echo "sk-test-minimax-integration-key" | cmd_config "minimax" 2>/dev/null || true
+    echo "test-key-xxxxkey" | cmd_config "minimax" 2>/dev/null || true
 
     # Step 4: Configure DeepSeek provider
-    echo "sk-test-deepseek-integration-key" | cmd_config "deepseek" 2>/dev/null || true
+    echo "test-key-xxxxkey" | cmd_config "deepseek" 2>/dev/null || true
 
     # Step 5: Set Z.AI as default
     cmd_default "zai"
@@ -220,7 +220,7 @@ test_configuration_workflow() {
     # Test provider-specific configurations
     cmd_config "anthropic" 2>/dev/null || true
 
-    echo "sk-test-zai-config-key" | cmd_config "zai" 2>/dev/null || true
+    echo "test-key-xxxxkey" | cmd_config "zai" 2>/dev/null || true
 
     # Verify configurations are stored
     local global_config

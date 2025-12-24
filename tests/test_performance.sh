@@ -238,7 +238,7 @@ test_disk_usage() {
     # Set up secrets
     for i in {1..100}; do
         local var_name="TEST_KEY_$i"
-        export "$var_name"="sk-test-key-$(printf 'a%.0s' {1..50})"
+        export "$var_name"="test-key-xxxx$(printf 'a%.0s' {1..50})"
     done
 
     save_secrets

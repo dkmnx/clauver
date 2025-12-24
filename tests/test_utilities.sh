@@ -70,8 +70,8 @@ test_mask_key_function() {
 
     # Test normal key
     local masked_normal
-    masked_normal=$(mask_key "sk-test-1234567890")
-    assert_equals "$masked_normal" "sk-t****7890" "mask_key() should mask normal API key correctly"
+    masked_normal=$(mask_key "test-key1234567890")
+    assert_equals "$masked_normal" "test****7890" "mask_key() should mask normal API key correctly"
 
     # Test short key
     local masked_short
