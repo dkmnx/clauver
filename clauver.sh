@@ -75,11 +75,9 @@ declare -A PERFORMANCE_DEFAULTS=(
 )
 
 # Validation constants
-# MIN_API_KEY_LENGTH=10 - Minimum length to filter out accidental empty/short inputs
 # ANTHROPIC_TEST_TIMEOUT=5s - Quick test for Anthropic CLI availability
 # PROVIDER_TEST_TIMEOUT=10s - Provider API connectivity test duration
 # DOWNLOAD_TIMEOUT=60s - Update/download operation timeout
-MIN_API_KEY_LENGTH=10
 ANTHROPIC_TEST_TIMEOUT=5
 PROVIDER_TEST_TIMEOUT=10
 DOWNLOAD_TIMEOUT=60
@@ -2053,7 +2051,7 @@ cmd_reset_provider() {
 
   # Check if provider is configured
   local is_configured=false
-  if [[ " zai minimax kimi deepseek " =~ " $provider " ]]; then
+  if [[ " zai minimax kimi deepseek " =~ $provider ]]; then
     local key_name="${provider^^}_API_KEY"
     local api_key
     api_key="$(get_secret "$key_name")"
@@ -2078,7 +2076,7 @@ cmd_reset_provider() {
   fi
 
   # Reset based on provider type
-  if [[ " zai minimax kimi deepseek " =~ " $provider " ]]; then
+  if [[ " zai minimax kimi deepseek " =~ $provider ]]; then
     # Built-in provider
     rm_secret "${provider^^}_API_KEY"
     set_config "${provider}_model" ""

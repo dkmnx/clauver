@@ -11,17 +11,14 @@ SECRETS="$BASE/secrets.env"
 BIN="$BASE/bin"
 AGE_KEY="$BASE/age.key"
 
-# Detect if script is being run via curl
-
-# Check if we can detect stdin is not a terminal AND the script file doesn't exist locally
-# Use a safer approach to detect if script is local or piped
-SCRIPT_TEMP_FILE=$(mktemp)
-echo "$0" > "$SCRIPT_TEMP_FILE"
-
+# Detect installation method:
+# - "remote": INSTALL_SCRIPT_URL env var is set (used by CI/CD)
+# - "local": Script file exists on disk (running from cloned repo)
+# - "curl": Piped from curl (stdin is pipe, no local file)
 if [ -n "${INSTALL_SCRIPT_URL:-}" ]; then
   SCRIPT_SOURCE="remote"
   SCRIPT_DIR="$(pwd)"
-elif [ -f "$0" ] && [ "$(head -c 10 "$SCRIPT_TEMP_FILE")" != "bash" ]; then
+elif [ -f "$0" ]; then
   SCRIPT_SOURCE="local"
   SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 else
@@ -29,8 +26,6 @@ else
   INSTALL_SCRIPT_URL="${INSTALL_SCRIPT_URL:-https://raw.githubusercontent.com/dkmnx/clauver/main}"
   SCRIPT_DIR="$(pwd)"
 fi
-
-rm -f "$SCRIPT_TEMP_FILE"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
