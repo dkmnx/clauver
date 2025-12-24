@@ -13,3 +13,6 @@ dist/
 .DS_Store
 .vscode/
 .idea/
+
+# Worktrees (isolated development workspaces)
+/.worktrees/
